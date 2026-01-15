@@ -1,0 +1,52 @@
+{
+  "name": "@dinario/private-dca-toolkit",
+  "version": "1.0.0",
+  "description": "Private DCA (Dollar Cost Averaging) toolkit for Solana using Arcium confidential transfers and Range compliance screening",
+  "main": "dist/cli.js",
+  "bin": {
+    "private-dca": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "ts-node src/cli.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/web3sly/private-dca-toolkit.git"
+  },
+  "keywords": [
+    "solana",
+    "dca",
+    "privacy",
+    "arcium",
+    "confidential-transfers"
+  ],
+  "author": "Dinario Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/web3sly/private-dca-toolkit/issues"
+  },
+  "homepage": "https://github.com/web3sly/private-dca-toolkit#readme",
+  "dependencies": {
+    "@arcium-hq/client": "^0.5.4",
+    "@jup-ag/api": "^6.0.0",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.0",
+    "node-cron": "^3.0.3",
+    "ora": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/node-cron": "^3.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
