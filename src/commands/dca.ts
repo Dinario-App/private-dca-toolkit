@@ -99,7 +99,8 @@ dcaCommand
   .command('list')
   .description('List all DCA schedules')
   .action(() => {
-    const schedules = schedulerService.getSchedules();
+    // Load schedules from disk (CLI runs fresh each time)
+    const schedules = schedulerService.loadSchedules();
 
     if (schedules.length === 0) {
       logger.info('No DCA schedules found. Create one with: private-dca dca schedule');
@@ -133,7 +134,7 @@ dcaCommand
   .description('Cancel a DCA schedule')
   .requiredOption('--id <id>', 'Schedule ID (first 8 chars is enough)')
   .action((options) => {
-    const schedules = schedulerService.getSchedules();
+    const schedules = schedulerService.loadSchedules();
     const schedule = schedules.find((s) => s.id.startsWith(options.id));
 
     if (!schedule) {
@@ -155,7 +156,7 @@ dcaCommand
   .description('Pause a DCA schedule')
   .requiredOption('--id <id>', 'Schedule ID')
   .action((options) => {
-    const schedules = schedulerService.getSchedules();
+    const schedules = schedulerService.loadSchedules();
     const schedule = schedules.find((s) => s.id.startsWith(options.id));
 
     if (!schedule) {
@@ -177,7 +178,7 @@ dcaCommand
   .description('Resume a paused DCA schedule')
   .requiredOption('--id <id>', 'Schedule ID')
   .action((options) => {
-    const schedules = schedulerService.getSchedules();
+    const schedules = schedulerService.loadSchedules();
     const schedule = schedules.find((s) => s.id.startsWith(options.id));
 
     if (!schedule) {
@@ -212,7 +213,7 @@ dcaCommand
       return;
     }
 
-    const schedules = schedulerService.getSchedules();
+    const schedules = schedulerService.loadSchedules();
     const schedule = schedules.find((s) => s.id.startsWith(options.id));
 
     if (!schedule) {
@@ -229,7 +230,7 @@ dcaCommand
   .description('View execution history')
   .option('--id <id>', 'Filter by schedule ID')
   .action((options) => {
-    const schedules = schedulerService.getSchedules();
+    const schedules = schedulerService.loadSchedules();
 
     let executions;
     if (options.id) {
