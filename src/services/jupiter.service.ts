@@ -29,7 +29,7 @@ interface SwapResponse {
 
 export class JupiterService {
   private connection: Connection;
-  private baseUrl = 'https://quote-api.jup.ag/v6';
+  private baseUrl = 'https://public.jupiterapi.com';
 
   constructor(connection: Connection) {
     this.connection = connection;

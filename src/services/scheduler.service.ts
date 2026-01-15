@@ -76,42 +76,66 @@ export class SchedulerService {
   }
 
   /**
-   * Remove a DCA schedule
+   * Remove a DCA schedule (works in CLI mode via file)
    */
   removeSchedule(scheduleId: string): boolean {
+    // Stop in-memory task if running
     const scheduledTask = this.tasks.get(scheduleId);
     if (scheduledTask) {
       scheduledTask.task.stop();
       this.tasks.delete(scheduleId);
-      this.saveSchedules();
+    }
+
+    // Remove from file
+    const schedules = this.loadSchedules();
+    const index = schedules.findIndex((s) => s.id === scheduleId);
+    if (index !== -1) {
+      schedules.splice(index, 1);
+      this.saveSchedulesToFile(schedules);
       return true;
     }
     return false;
   }
 
   /**
-   * Pause a DCA schedule
+   * Pause a DCA schedule (works in CLI mode via file)
    */
   pauseSchedule(scheduleId: string): boolean {
+    // Stop in-memory task if running
     const scheduledTask = this.tasks.get(scheduleId);
     if (scheduledTask) {
       scheduledTask.schedule.active = false;
       scheduledTask.task.stop();
-      this.saveSchedules();
+    }
+
+    // Update in file
+    const schedules = this.loadSchedules();
+    const schedule = schedules.find((s) => s.id === scheduleId);
+    if (schedule) {
+      schedule.active = false;
+      this.saveSchedulesToFile(schedules);
       return true;
     }
     return false;
   }
 
   /**
-   * Resume a DCA schedule
+   * Resume a DCA schedule (works in CLI mode via file)
    */
   resumeSchedule(scheduleId: string): boolean {
+    // Start in-memory task if exists
     const scheduledTask = this.tasks.get(scheduleId);
     if (scheduledTask) {
       scheduledTask.schedule.active = true;
       scheduledTask.task.start();
-      this.saveSchedules();
+    }
+
+    // Update in file
+    const schedules = this.loadSchedules();
+    const schedule = schedules.find((s) => s.id === scheduleId);
+    if (schedule) {
+      schedule.active = true;
+      this.saveSchedulesToFile(schedules);
       return true;
     }
     return false;
@@ -171,10 +195,17 @@ export class SchedulerService {
   }
 
   /**
-   * Save schedules to disk
+   * Save schedules to disk (from in-memory tasks)
    */
   private saveSchedules(): void {
     const schedules = this.getSchedules();
+    fs.writeFileSync(this.schedulesFile, JSON.stringify(schedules, null, 2));
+  }
+
+  /**
+   * Save schedules array directly to disk
+   */
+  saveSchedulesToFile(schedules: DCASchedule[]): void {
     fs.writeFileSync(this.schedulesFile, JSON.stringify(schedules, null, 2));
   }
 
