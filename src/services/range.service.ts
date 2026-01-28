@@ -8,15 +8,25 @@ interface ScreeningResult {
   screenedAt: string;
 }
 
-interface RangeResponse {
-  data: {
+// Range API response format from /v1/risk/address endpoint
+interface RangeRiskResponse {
+  riskScore: number; // 1-10
+  riskLevel: string; // "CRITICAL RISK (Directly malicious)" | "Very low risk" | etc
+  numHops: number;
+  maliciousAddressesFound: Array<{
     address: string;
-    chain: string;
-    risk_level: string;
-    risk_score: number;
-    is_sanctioned: boolean;
-    risk_factors: string[];
-  };
+    distance: number;
+    name_tag: string | null;
+    entity: string | null;
+    category: string;
+  }>;
+  reasoning: string;
+  attribution: {
+    name_tag: string;
+    entity: string;
+    category: string;
+    address_role: string;
+  } | null;
 }
 
 export class RangeService {
@@ -28,16 +38,14 @@ export class RangeService {
   }
 
   async screenAddress(address: string, chain: string = 'solana'): Promise<ScreeningResult> {
-    const response = await fetch(`${this.baseUrl}/screen`, {
-      method: 'POST',
+    // Use GET /v1/risk/address with query params
+    const url = `${this.baseUrl}/risk/address?address=${encodeURIComponent(address)}&network=${encodeURIComponent(chain)}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        address,
-        chain,
-      }),
     });
 
     if (!response.ok) {
@@ -45,15 +53,40 @@ export class RangeService {
       throw new Error(`Range screening failed: ${error}`);
     }
 
-    const result = (await response.json()) as RangeResponse;
+    const result = (await response.json()) as RangeRiskResponse;
+
+    // Map Range's 1-10 risk score to our risk levels
+    // 1-3: low, 4-5: medium, 6-7: high, 8-10: severe
+    let riskLevel: ScreeningResult['riskLevel'] = 'low';
+    if (result.riskScore >= 8) {
+      riskLevel = 'severe';
+    } else if (result.riskScore >= 6) {
+      riskLevel = 'high';
+    } else if (result.riskScore >= 4) {
+      riskLevel = 'medium';
+    }
+
+    // Check if sanctioned (critical risk or has malicious addresses at distance 0)
+    const isSanctioned =
+      result.riskLevel.toLowerCase().includes('critical') ||
+      result.maliciousAddressesFound.some(m => m.distance === 0);
+
+    // Build risk factors from malicious addresses found
+    const riskFactors = result.maliciousAddressesFound.map(m =>
+      `${m.category}${m.name_tag ? ` (${m.name_tag})` : ''} - ${m.distance} hops away`
+    );
+
+    if (result.reasoning) {
+      riskFactors.unshift(result.reasoning);
+    }
 
     return {
-      address: result.data.address,
-      chain: result.data.chain,
-      isSanctioned: result.data.is_sanctioned,
-      riskLevel: result.data.risk_level as ScreeningResult['riskLevel'],
-      riskScore: result.data.risk_score,
-      riskFactors: result.data.risk_factors,
+      address,
+      chain,
+      isSanctioned,
+      riskLevel,
+      riskScore: result.riskScore * 10, // Convert 1-10 to 0-100
+      riskFactors,
       screenedAt: new Date().toISOString(),
     };
   }
