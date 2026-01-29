@@ -125,6 +125,16 @@ export const swapCommand = new Command('swap')
         console.log('');
       }
 
+      // Display ZK pool anonymity information if enabled
+      if (useZk) {
+        const zkInfo = PrivacyCashService.getAnonymitySetInfo(fromToken);
+        console.log('🔐 ZK Pool Anonymity Set:');
+        console.log(`   Hidden among: ${zkInfo.minAnonymitySet}+ other users`);
+        console.log(`   Pool value: ~${zkInfo.estimatedPoolValue}`);
+        console.log(`   Privacy: WHO you are is hidden in the anonymity set`);
+        console.log('');
+      }
+
       // Step 1: Screen addresses if enabled
       if (shouldScreen) {
         const screenSpinner = ora('Screening addresses with Range...').start();
