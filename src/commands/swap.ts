@@ -446,7 +446,7 @@ export const swapCommand = new Command('swap')
 
       const explorerUrl =
         config.network === 'mainnet-beta'
-          ? `https://solscan.io/tx/${swapSignature}`
+          ? `https://orbmarkets.io/tx/${swapSignature}`
           : `https://solscan.io/tx/${swapSignature}?cluster=devnet`;
       logger.keyValue('Explorer', explorerUrl);
 
