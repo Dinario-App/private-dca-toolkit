@@ -68,7 +68,13 @@ export class JupiterService {
         userPublicKey: keypair.publicKey.toBase58(),
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: 'auto',
+        // Use medium priority - 'auto' can spike to very high fees
+        prioritizationFeeLamports: {
+          priorityLevelWithMaxLamports: {
+            maxLamports: 1000000, // Cap at 0.001 SOL max priority fee
+            priorityLevel: 'medium'
+          }
+        },
       }),
     });
 
