@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { configCommand } from './commands/config.js';
-import { dcaCommand } from './commands/dca.js';
-import { swapCommand } from './commands/swap.js';
+import { configCommand } from './commands/config';
+import { dcaCommand } from './commands/dca';
+import { swapCommand } from './commands/swap';
 import dotenv from 'dotenv';
 
 dotenv.config();

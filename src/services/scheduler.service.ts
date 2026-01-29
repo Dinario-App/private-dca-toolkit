@@ -2,7 +2,7 @@ import * as cron from 'node-cron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { DCASchedule, DCAExecution } from '../types/index.js';
+import { DCASchedule, DCAExecution } from '../types/index';
 
 interface ScheduledTask {
   id: string;

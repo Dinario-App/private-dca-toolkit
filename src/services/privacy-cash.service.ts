@@ -15,7 +15,7 @@
  */
 
 import { Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
-import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index.js';
+import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
 
 // Privacy Cash SDK types (dynamically imported due to Node 24+ requirement)
 // Types match the real SDK at privacycash/dist/index.d.ts

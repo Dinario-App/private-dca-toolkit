@@ -16,7 +16,7 @@
  * @see docs/ARCHITECTURE.md for integration details
  */
 
-import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index.js';
+import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
 
 // ShadowWire SDK types (match real SDK at @radr/shadowwire/dist/types.d.ts)
 type TokenSymbol = 'SOL' | 'RADR' | 'USDC' | 'ORE' | 'BONK' | 'JIM' | 'GODL' | 'HUSTLE' | 'ZEC' | 'CRT' | 'BLACKCOIN' | 'GIL' | 'ANON' | 'WLFI' | 'USD1' | 'AOL' | 'IQLABS';
