@@ -292,11 +292,12 @@ export class EphemeralService {
    * Covers: ATA creation (if needed) + swap + output transfer + buffer
    */
   getRecommendedSolFunding(): number {
-    // 0.002 SOL for ATA creations (up to 2)
-    // 0.001 SOL for swap priority fees
+    // 0.002 SOL for source ATA creation (if needed)
+    // 0.002 SOL for destination ATA creation (if needed)
+    // 0.003 SOL for swap priority fees (Jupiter auto can vary)
     // 0.001 SOL for output transfer
-    // 0.001 SOL buffer
-    return 0.005;
+    // 0.002 SOL buffer for safety
+    return 0.01;
   }
 
   /**
