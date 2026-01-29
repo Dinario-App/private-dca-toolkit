@@ -16,6 +16,9 @@ export interface DCASchedule {
   executedCount: number;
   createdAt: string;
   active: boolean;
+  // Account pooling: reuse ephemeral wallet across swaps
+  ephemeralWalletAddress?: string; // Current ephemeral wallet for this schedule
+  ephemeralWalletCreatedAt?: string; // When the pooled wallet was created
 }
 
 export interface DCAExecution {
