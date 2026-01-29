@@ -1,14 +1,14 @@
 import { Command } from 'commander';
 import { PublicKey } from '@solana/web3.js';
-import { loadConfig, loadKeypair, getConnection } from '../utils/wallet.js';
-import { logger } from '../utils/logger.js';
-import { JupiterService } from '../services/jupiter.service.js';
-import { RangeService } from '../services/range.service.js';
-import { ArciumService, ArciumSimulated } from '../services/arcium.service.js';
-import { EphemeralService } from '../services/ephemeral.service.js';
-import { PrivacyCashService, PrivacyCashSimulated } from '../services/privacy-cash.service.js';
-import { ShadowWireService, ShadowWireSimulated } from '../services/shadowwire.service.js';
-import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index.js';
+import { loadConfig, loadKeypair, getConnection } from '../utils/wallet';
+import { logger } from '../utils/logger';
+import { JupiterService } from '../services/jupiter.service';
+import { RangeService } from '../services/range.service';
+import { ArciumService, ArciumSimulated } from '../services/arcium.service';
+import { EphemeralService } from '../services/ephemeral.service';
+import { PrivacyCashService, PrivacyCashSimulated } from '../services/privacy-cash.service';
+import { ShadowWireService, ShadowWireSimulated } from '../services/shadowwire.service';
+import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
 import ora from 'ora';
 
 export const swapCommand = new Command('swap')

@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { loadConfig, saveConfig, loadKeypair, getConnection, getBalance } from '../utils/wallet.js';
-import { logger } from '../utils/logger.js';
+import { loadConfig, saveConfig, loadKeypair, getConnection, getBalance } from '../utils/wallet';
+import { logger } from '../utils/logger';
 import ora from 'ora';
 
 export const configCommand = new Command('config')

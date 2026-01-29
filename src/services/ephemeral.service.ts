@@ -14,7 +14,7 @@ import {
   getAccount,
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
-import { TOKEN_DECIMALS } from '../types/index.js';
+import { TOKEN_DECIMALS } from '../types/index';
 
 interface EphemeralWallet {
   keypair: Keypair;
