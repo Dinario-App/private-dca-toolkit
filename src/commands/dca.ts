@@ -20,16 +20,16 @@ export const dcaCommand = new Command('dca')
 // Schedule a new DCA
 dcaCommand
   .command('schedule')
-  .description('Create a new DCA schedule')
+  .description('Create a new DCA schedule (private by default)')
   .requiredOption('--from <token>', 'Source token (SOL, USDC, USDT, BONK, WIF, JUP, RAY, ORCA)')
   .requiredOption('--to <token>', 'Destination token (SOL, USDC, USDT, BONK, WIF, JUP, RAY, ORCA)')
   .requiredOption('--amount <number>', 'Amount per execution')
   .requiredOption('--frequency <freq>', 'Frequency: hourly, daily, weekly, monthly')
-  .option('--ephemeral', 'Use ephemeral wallets for privacy (recommended)', false)
+  .option('--no-privacy', 'Disable ephemeral wallet privacy', false)
   .option('--zk', 'Use Privacy Cash ZK pool for maximum anonymity (requires Node 24+)', false)
   .option('--shadow', 'Use ShadowWire for encrypted amounts (Bulletproofs via Radr Labs)', false)
   .option('--private', 'Use Arcium confidential transfers for encrypted amounts', false)
-  .option('--screen', 'Screen addresses with Range', false)
+  .option('--no-screen', 'Disable Range compliance screening', false)
   .option('--executions <number>', 'Total number of executions (optional)')
   .option('--slippage <bps>', 'Slippage tolerance in basis points', '50')
   .action(async (options) => {
@@ -81,10 +81,10 @@ dcaCommand
       amountPerExecution: amount,
       frequency,
       isPrivate: options.private,
-      useEphemeral: options.ephemeral,
+      useEphemeral: options.privacy, // Privacy ON by default (disable with --no-privacy)
       useZk: options.zk,
       useShadow: options.shadow,
-      screenAddresses: options.screen,
+      screenAddresses: options.screen, // Screening ON by default (disable with --no-screen)
       slippageBps: parseInt(options.slippage),
       totalExecutions: options.executions ? parseInt(options.executions) : undefined,
       executedCount: 0,

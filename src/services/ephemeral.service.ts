@@ -344,4 +344,55 @@ export class EphemeralService {
 
     return TOKEN_MINTS[mint] || 'UNKNOWN';
   }
+
+  /**
+   * Account Pooling: Get or create a reusable ephemeral wallet for a DCA schedule
+   * Reusing the same wallet across multiple swaps amortizes rent costs (~0.002 SOL)
+   *
+   * @param userKeypair - User's main wallet
+   * @param scheduleWalletAddress - Stored ephemeral wallet address from schedule
+   * @param poolFile - Path to store pooled wallet keys (encrypted in production)
+   * @returns Ephemeral wallet to use for this swap
+   */
+  async getOrCreatePooledWallet(
+    userKeypair: Keypair,
+    scheduleWalletAddress: string | undefined,
+    poolFile: string
+  ): Promise<EphemeralWallet> {
+    // If schedule already has an ephemeral wallet, regenerate keypair from pool file
+    if (scheduleWalletAddress) {
+      // In production, this would retrieve from encrypted storage
+      // For now, return address indicator
+      return {
+        keypair: Keypair.generate(), // Placeholder - actual impl would load from pool
+        publicKey: scheduleWalletAddress,
+      };
+    }
+
+    // Create new ephemeral wallet for this schedule
+    const ephemeralWallet = this.generateEphemeralWallet();
+    // In production, save keypair to encrypted pool file
+    // For now, it's stored in memory
+    return ephemeralWallet;
+  }
+
+  /**
+   * Close a pooled ephemeral wallet and recover remaining SOL
+   * Call this when DCA schedule is paused, cancelled, or completes
+   *
+   * @param ephemeralKeypair - Ephemeral wallet keypair
+   * @param destination - Where to send recovered SOL
+   * @returns Amount recovered (or null if already empty)
+   */
+  async closePooledWallet(
+    ephemeralKeypair: Keypair,
+    destination: PublicKey
+  ): Promise<number | null> {
+    const recovered = await this.recoverSol(ephemeralKeypair, destination);
+    if (recovered) {
+      console.log(`✓ Recovered ${recovered} from pooled wallet`);
+      return parseFloat(recovered);
+    }
+    return null;
+  }
 }

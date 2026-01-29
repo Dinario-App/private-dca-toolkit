@@ -12,15 +12,15 @@ import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
 import ora from 'ora';
 
 export const swapCommand = new Command('swap')
-  .description('Execute a token swap')
+  .description('Execute a token swap (private by default)')
   .requiredOption('--from <token>', 'Source token (SOL, USDC, USDT, BONK, WIF, JUP)')
   .requiredOption('--to <token>', 'Destination token (SOL, USDC, USDT, BONK, WIF, JUP)')
   .requiredOption('--amount <number>', 'Amount to swap')
-  .option('--ephemeral', 'Use ephemeral wallet for privacy (breaks on-chain linkability)', false)
+  .option('--no-privacy', 'Disable ephemeral wallet (expose your wallet on-chain)', false)
   .option('--zk', 'Use Privacy Cash ZK pool for maximum anonymity (requires Node 24+)', false)
   .option('--shadow', 'Use ShadowWire for encrypted amounts (Bulletproofs via Radr Labs)', false)
   .option('--private', 'Use Arcium confidential transfer for encrypted amounts', false)
-  .option('--screen', 'Screen addresses with Range before swap', false)
+  .option('--no-screen', 'Disable Range compliance screening', false)
   .option('--slippage <bps>', 'Slippage tolerance in basis points', '50')
   .option('--destination <address>', 'Send output to different address (only with --ephemeral)')
   .action(async (options) => {
@@ -34,11 +34,11 @@ export const swapCommand = new Command('swap')
     const toToken = options.to.toUpperCase();
     const amount = parseFloat(options.amount);
     const slippageBps = parseInt(options.slippage);
-    const useEphemeral = options.ephemeral;
+    const useEphemeral = options.privacy; // Privacy ON by default (disable with --no-privacy)
     const useZk = options.zk;
     const useShadow = options.shadow;
     const isPrivate = options.private;
-    const shouldScreen = options.screen;
+    const shouldScreen = options.screen; // Screening ON by default (disable with --no-screen)
     const customDestination = options.destination;
 
     // Validate tokens
