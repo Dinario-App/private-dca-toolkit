@@ -64,13 +64,13 @@ private-dca dca history
 
 **Best for:** Developers, power users, testing, scripting.
 
-See [CLI Docs](./README-CLI.md)
+See [CLI Docs](./SHIPPED.md) and [Examples](./examples)
 
 ---
 
 ### 2. **Web UI** (For Anyone)
 
-Visit: **[private-dca.vercel.app](https://private-dca-web.vercel.app)**
+Visit: **[private-dca-web.vercel.app](https://private-dca-web.vercel.app)**
 
 - Connect wallet
 - Set DCA parameters
@@ -81,6 +81,8 @@ Visit: **[private-dca.vercel.app](https://private-dca-web.vercel.app)**
 No CLI needed. No technical knowledge needed. Click and go.
 
 **Best for:** Mainstream users, traders, anyone who just wants it to work.
+
+See [Web UI](https://private-dca-web.vercel.app) (live at vercel.app)
 
 ---
 
@@ -111,7 +113,7 @@ console.log(`Privacy score: ${result.privacyScore}/100`);
 
 **Best for:** Companies integrating privacy into their platforms (neobanks, wallets, DeFi apps).
 
-See [SDK Docs](./sdk/README.md)
+See [SDK Docs](./SDK.md) and [Examples](./examples)
 
 ---
 
