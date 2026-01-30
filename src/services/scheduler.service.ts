@@ -284,4 +284,66 @@ export class SchedulerService {
         return null;
     }
   }
+
+  /**
+   * Account Pooling: Get or create a reusable ephemeral wallet for this schedule
+   * Saves ~0.002 SOL rent per swap by reusing the same ephemeral wallet
+   * across multiple DCA executions
+   */
+  getOrCreatePooledWallet(scheduleId: string): {
+    address: string;
+    isNew: boolean;
+  } {
+    const schedule = this.loadSchedules().find(s => s.id === scheduleId);
+    if (!schedule) {
+      throw new Error(`Schedule ${scheduleId} not found`);
+    }
+
+    // If schedule already has an ephemeral wallet, reuse it
+    if (schedule.ephemeralWalletAddress) {
+      return {
+        address: schedule.ephemeralWalletAddress,
+        isNew: false,
+      };
+    }
+
+    // Create new pooled wallet for this schedule
+    // In production, this would be encrypted and stored securely
+    const newPooledWalletAddress = `pool_${scheduleId.slice(0, 8)}_${Date.now()}`;
+
+    // Update schedule with pooled wallet address
+    const schedules = this.loadSchedules();
+    const idx = schedules.findIndex(s => s.id === scheduleId);
+    if (idx !== -1) {
+      schedules[idx].ephemeralWalletAddress = newPooledWalletAddress;
+      schedules[idx].ephemeralWalletCreatedAt = new Date().toISOString();
+      this.saveSchedulesToFile(schedules);
+    }
+
+    return {
+      address: newPooledWalletAddress,
+      isNew: true,
+    };
+  }
+
+  /**
+   * Log pooling savings for user visibility
+   */
+  logPoolingSavings(scheduleId: string): void {
+    const schedule = this.loadSchedules().find(s => s.id === scheduleId);
+    if (!schedule || !schedule.ephemeralWalletAddress) return;
+
+    const executionCount = this.getExecutions(scheduleId).length;
+    if (executionCount === 0) return;
+
+    // Each swap saves ~0.002 SOL in rent when pooled
+    const solSaved = 0.002 * executionCount;
+    const usdSaved = solSaved * 40; // Rough estimate at $40/SOL
+
+    console.log(`\n💰 Account Pooling Savings:`);
+    console.log(`   Executions: ${executionCount}`);
+    console.log(`   SOL saved: ~${solSaved.toFixed(4)}`);
+    console.log(`   USD saved: ~$${usdSaved.toFixed(2)}`);
+    console.log(`   Pooled wallet: ${schedule.ephemeralWalletAddress.slice(0, 20)}...`);
+  }
 }

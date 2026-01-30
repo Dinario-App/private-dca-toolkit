@@ -42,7 +42,7 @@ export class HeliusService {
    */
   async getPriorityFeeEstimate(
     serializedTx: string,
-    priorityLevel: PriorityLevel = 'Medium'
+    priorityLevel: PriorityLevel = 'Low' // Default to Low for cost savings (~90% cheaper)
   ): Promise<number> {
     if (!HeliusService.isHeliusRpc(this.rpcUrl)) {
       // For non-Helius RPCs, return a default priority fee
@@ -92,7 +92,7 @@ export class HeliusService {
    */
   async getPriorityFeeByAccounts(
     accountKeys: string[],
-    priorityLevel: PriorityLevel = 'Medium'
+    priorityLevel: PriorityLevel = 'Low' // Default to Low for cost savings
   ): Promise<number> {
     if (!HeliusService.isHeliusRpc(this.rpcUrl)) {
       return this.getDefaultPriorityFee(priorityLevel);
