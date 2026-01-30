@@ -92,20 +92,20 @@ dcaCommand
       active: true,
     };
 
-    logger.header('Create DCA Schedule', 'Set up automated dollar-cost averaging with privacy');
+    logger.header('Create DCA Schedule', 'Set up automated dollar-cost averaging with privacy', '▸');
 
-    // Display summary
-    logger.summary('Schedule Configuration', [
-      { label: 'ID', value: schedule.id.slice(0, 8), color: 'cyan' },
-      { label: 'Swap Amount', value: `${amount} ${fromToken}`, color: 'green' },
-      { label: 'Buy Asset', value: toToken, color: 'green' },
-      { label: 'Frequency', value: frequency.toUpperCase(), color: 'cyan' },
-      { label: 'Ephemeral Wallet', value: options.privacy ? 'Enabled' : 'Disabled', color: options.privacy ? 'green' : 'yellow' },
-      { label: 'ZK Privacy', value: options.zk ? 'Enabled' : 'Disabled', color: options.zk ? 'green' : 'yellow' },
-      { label: 'ShadowWire', value: options.shadow ? 'Enabled' : 'Disabled', color: options.shadow ? 'green' : 'yellow' },
-      { label: 'Arcium Confidential', value: options.private ? 'Enabled' : 'Disabled', color: options.private ? 'green' : 'yellow' },
-      { label: 'Address Screening', value: options.screen ? 'Enabled' : 'Disabled', color: options.screen ? 'green' : 'yellow' },
-      { label: 'Total Executions', value: schedule.totalExecutions?.toString() || 'Unlimited', color: 'cyan' },
+    // Display configuration panel
+    logger.configPanel('Schedule Configuration', [
+      { label: 'ID', value: schedule.id.slice(0, 8) },
+      { label: 'Swap Amount', value: `${amount} ${fromToken}` },
+      { label: 'Buy Asset', value: toToken },
+      { label: 'Frequency', value: frequency.toUpperCase() },
+      { label: 'Ephemeral Wallet', value: options.privacy, badge: options.privacy ? 'PRIVATE' : 'PUBLIC' },
+      { label: 'ZK Privacy', value: options.zk, badge: options.zk ? 'MAXIMUM' : undefined },
+      { label: 'ShadowWire', value: options.shadow, badge: options.shadow ? 'ENCRYPTED' : undefined },
+      { label: 'Arcium Confidential', value: options.private, badge: options.private ? 'ENCRYPTED' : undefined },
+      { label: 'Address Screening', value: options.screen },
+      { label: 'Total Executions', value: schedule.totalExecutions?.toString() || 'Unlimited' },
     ]);
 
     // Add the schedule
@@ -113,12 +113,12 @@ dcaCommand
       await executeDCA(s, config);
     });
 
-    logger.alert('DCA schedule created successfully! 🎉', 'success');
+    logger.alertBox('DCA schedule created successfully! 🎉', 'success');
     
     const nextExec = schedulerService.getNextExecution(schedule.id);
     if (nextExec) {
       logger.newline();
-      logger.keyValue('Next Execution', nextExec.toLocaleString(), 'green');
+      logger.stat('Next Execution', nextExec.toLocaleString(), undefined, true);
     }
 
     if (options.ephemeral) {
