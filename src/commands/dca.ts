@@ -92,29 +92,33 @@ dcaCommand
       active: true,
     };
 
-    logger.header('New DCA Schedule');
-    logger.keyValue('ID', schedule.id.slice(0, 8));
-    logger.keyValue('Swap', `${amount} ${fromToken} → ${toToken}`);
-    logger.keyValue('Frequency', frequency);
-    logger.keyValue('Ephemeral', options.ephemeral ? 'Yes (privacy mode)' : 'No');
-    logger.keyValue('ZK Pool', options.zk ? 'Yes (maximum privacy)' : 'No');
-    logger.keyValue('ShadowWire', options.shadow ? 'Yes (encrypted amounts)' : 'No');
-    logger.keyValue('Confidential', options.private ? logger.private() : logger.public());
-    logger.keyValue('Screening', options.screen ? 'Enabled' : 'Disabled');
-    if (schedule.totalExecutions) {
-      logger.keyValue('Total Executions', schedule.totalExecutions.toString());
-    }
-    console.log('');
+    logger.header('Create DCA Schedule', 'Set up automated dollar-cost averaging with privacy');
+
+    // Display summary
+    logger.summary('Schedule Configuration', [
+      { label: 'ID', value: schedule.id.slice(0, 8), color: 'cyan' },
+      { label: 'Swap Amount', value: `${amount} ${fromToken}`, color: 'green' },
+      { label: 'Buy Asset', value: toToken, color: 'green' },
+      { label: 'Frequency', value: frequency.toUpperCase(), color: 'cyan' },
+      { label: 'Ephemeral Wallet', value: options.privacy ? 'Enabled' : 'Disabled', color: options.privacy ? 'green' : 'yellow' },
+      { label: 'ZK Privacy', value: options.zk ? 'Enabled' : 'Disabled', color: options.zk ? 'green' : 'yellow' },
+      { label: 'ShadowWire', value: options.shadow ? 'Enabled' : 'Disabled', color: options.shadow ? 'green' : 'yellow' },
+      { label: 'Arcium Confidential', value: options.private ? 'Enabled' : 'Disabled', color: options.private ? 'green' : 'yellow' },
+      { label: 'Address Screening', value: options.screen ? 'Enabled' : 'Disabled', color: options.screen ? 'green' : 'yellow' },
+      { label: 'Total Executions', value: schedule.totalExecutions?.toString() || 'Unlimited', color: 'cyan' },
+    ]);
 
     // Add the schedule
     schedulerService.addSchedule(schedule, async (s) => {
       await executeDCA(s, config);
     });
 
-    logger.success('DCA schedule created!');
+    logger.alert('DCA schedule created successfully! 🎉', 'success');
+    
     const nextExec = schedulerService.getNextExecution(schedule.id);
     if (nextExec) {
-      logger.keyValue('Next Execution', nextExec.toLocaleString());
+      logger.newline();
+      logger.keyValue('Next Execution', nextExec.toLocaleString(), 'green');
     }
 
     if (options.ephemeral) {
@@ -149,26 +153,37 @@ dcaCommand
       return;
     }
 
-    logger.header('DCA Schedules');
-    console.log('');
+    logger.header('DCA Schedules', 'All active and paused schedules');
 
-    for (const schedule of schedules) {
+    // Build table rows
+    const rows = schedules.map((schedule) => {
       const status = schedule.active ? '🟢 Active' : '🔴 Paused';
-      const privacyMode = schedule.useZk ? '🛡️' : (schedule.useShadow ? '🔐' : (schedule.useEphemeral ? '🔒' : ''));
-      console.log(`${status} ${privacyMode} [${schedule.id.slice(0, 8)}]`);
-      logger.keyValue('  Swap', `${schedule.amountPerExecution} ${schedule.fromToken} → ${schedule.toToken}`);
-      logger.keyValue('  Frequency', schedule.frequency);
-      const privacyLabel = schedule.useZk ? 'ZK Pool' : (schedule.useShadow ? 'ShadowWire' : (schedule.useEphemeral ? 'Ephemeral' : (schedule.isPrivate ? 'Confidential' : 'Public')));
-      logger.keyValue('  Privacy', privacyLabel);
-
-      const executions = schedulerService.getExecutions(schedule.id);
-      logger.keyValue('  Executions', `${executions.length}${schedule.totalExecutions ? `/${schedule.totalExecutions}` : ''}`);
-
+      const privacyMode = schedule.useZk ? '🛡️ ZK' : (schedule.useShadow ? '🔐 Shadow' : (schedule.useEphemeral ? '🔒 Eph' : ''));
+      const swap = `${schedule.amountPerExecution} ${schedule.fromToken}→${schedule.toToken}`;
+      const executions = schedulerService.getExecutions(schedule.id).length;
+      const totalExec = schedule.totalExecutions ? `${executions}/${schedule.totalExecutions}` : `${executions}`;
       const nextExec = schedulerService.getNextExecution(schedule.id);
-      if (nextExec) {
-        logger.keyValue('  Next', nextExec.toLocaleString());
-      }
-      console.log('');
+      const nextTime = nextExec ? nextExec.toLocaleDateString() : 'N/A';
+
+      return [
+        status,
+        schedule.id.slice(0, 6),
+        swap,
+        schedule.frequency,
+        privacyMode,
+        totalExec,
+        nextTime,
+      ];
+    });
+
+    logger.table(
+      ['Status', 'ID', 'Swap', 'Freq', 'Privacy', 'Exec', 'Next'],
+      rows,
+      { colWidths: [10, 8, 20, 8, 10, 10, 14] }
+    );
+
+    if (schedules.length > 0) {
+      logger.info(`Total: ${schedules.length} schedule${schedules.length !== 1 ? 's' : ''}`);
     }
   });
 
@@ -293,23 +308,37 @@ dcaCommand
       return;
     }
 
-    logger.header('Execution History');
-    console.log('');
+    logger.header('Execution History', 'Last 10 DCA executions');
 
-    for (const exec of executions.slice(-10).reverse()) {
-      const status = exec.success ? '✅' : '❌';
+    // Build execution rows
+    const rows = executions.slice(-10).reverse().map((exec) => {
+      const status = exec.success ? '✅ Success' : '❌ Failed';
       const schedule = schedules.find((s) => s.id === exec.scheduleId);
-      const swapInfo = schedule ? `${schedule.fromToken} → ${schedule.toToken}` : 'Unknown';
+      const swapInfo = schedule ? `${schedule.fromToken}→${schedule.toToken}` : '?';
+      const time = new Date(exec.executedAt).toLocaleTimeString();
+      const txShort = exec.signature ? exec.signature.slice(0, 8) + '...' : '—';
 
-      console.log(`${status} [${exec.scheduleId.slice(0, 8)}] ${swapInfo}`);
-      logger.keyValue('  Time', new Date(exec.executedAt).toLocaleString());
-      if (exec.signature) {
-        logger.keyValue('  Tx', exec.signature.slice(0, 16) + '...');
-      }
-      if (exec.error) {
-        logger.keyValue('  Error', exec.error);
-      }
-      console.log('');
+      return [status, time, swapInfo, exec.scheduleId.slice(0, 6), txShort];
+    });
+
+    logger.table(
+      ['Status', 'Time', 'Swap', 'Schedule', 'Tx'],
+      rows,
+      { colWidths: [12, 14, 12, 8, 14] }
+    );
+
+    logger.info(`${executions.length} total execution${executions.length !== 1 ? 's' : ''}`);
+
+    // Show recent errors if any
+    const errors = executions.filter(e => e.error);
+    if (errors.length > 0) {
+      logger.newline();
+      logger.alert(`⚠️ ${errors.length} recent error${errors.length !== 1 ? 's' : ''}`, 'warning');
+      errors.slice(-3).forEach(err => {
+        if (err.error) {
+          logger.keyValue('Error', err.error.slice(0, 50), 'yellow');
+        }
+      });
     }
   });
 
@@ -318,13 +347,24 @@ dcaCommand
  * Supports both standard and ephemeral wallet flows for privacy
  */
 async function executeDCA(schedule: DCASchedule, config: any): Promise<void> {
-  logger.header(`Executing DCA: ${schedule.fromToken} → ${schedule.toToken}`);
-  if (schedule.useZk) {
-    logger.info('Using Privacy Cash ZK pool for maximum anonymity');
-  } else if (schedule.useEphemeral) {
-    logger.info('Using ephemeral wallet for privacy');
-  }
-  console.log('');
+  logger.header(`Execute DCA Swap`, `${schedule.fromToken} → ${schedule.toToken}`);
+
+  // Show execution plan
+  const privacyFeatures = [];
+  if (schedule.useZk) privacyFeatures.push('Privacy Cash ZK Pool');
+  if (schedule.useEphemeral) privacyFeatures.push('Ephemeral Wallet');
+  if (schedule.useShadow) privacyFeatures.push('ShadowWire');
+  if (schedule.isPrivate) privacyFeatures.push('Arcium Confidential');
+  if (schedule.screenAddresses) privacyFeatures.push('Address Screening');
+
+  logger.summary('Execution Plan', [
+    { label: 'Amount', value: `${schedule.amountPerExecution} ${schedule.fromToken}`, color: 'green' },
+    { label: 'Target', value: schedule.toToken, color: 'cyan' },
+    { label: 'Privacy Features', value: privacyFeatures.length > 0 ? privacyFeatures.join(' + ') : 'None', color: privacyFeatures.length > 0 ? 'green' : 'yellow' },
+    { label: 'Slippage', value: `${schedule.slippageBps} bps`, color: 'cyan' },
+  ]);
+
+  logger.newline();
 
   try {
     const keypair = loadKeypair(config.walletPath);
@@ -599,20 +639,26 @@ async function executeDCA(schedule: DCASchedule, config: any): Promise<void> {
       }
     }
 
-    console.log('');
-    logger.success('DCA execution complete!');
-    logger.tx(signature);
+    logger.newline();
+    logger.alert('DCA execution complete! 🎉', 'success');
+
+    // Build summary items
+    const summaryItems = [
+      { label: 'Transaction', value: signature.slice(0, 16) + '...', color: 'cyan' as const },
+      { label: 'Output', value: `${outputAmount.toFixed(6)} ${schedule.toToken}`, color: 'green' as const },
+    ];
 
     if (schedule.useZk) {
-      logger.keyValue('Privacy', 'Your main wallet is not visible on-chain for this swap');
-      logger.keyValue('ZK Privacy', 'Funds passed through Privacy Cash anonymity set (hides WHO)');
-    } else if (schedule.useEphemeral) {
-      logger.keyValue('Privacy', 'Your main wallet is not visible on-chain for this swap');
+      summaryItems.push({ label: 'ZK Privacy', value: 'Funds through Privacy Cash anonymity set', color: 'green' as const });
+    }
+    if (schedule.useEphemeral) {
+      summaryItems.push({ label: 'Ephemeral', value: 'Main wallet hidden on-chain', color: 'green' as const });
+    }
+    if (schedule.useShadow) {
+      summaryItems.push({ label: 'ShadowWire', value: 'Amount encrypted with Bulletproofs', color: 'green' as const });
     }
 
-    if (schedule.useShadow) {
-      logger.keyValue('ShadowWire', 'Transaction amount encrypted with Bulletproofs (hides HOW MUCH)');
-    }
+    logger.summary('Execution Result', summaryItems);
   } catch (error: any) {
     logger.error(`DCA execution failed: ${error.message}`);
     throw error;
