@@ -2,7 +2,7 @@ import chalk from 'chalk';
 
 /**
  * Premium Enterprise CLI UI for Private DCA
- * Stripe/Vercel level professional design
+ * Stripe/Vercel-level professional design
  */
 
 const truncate = (str: string, len: number): string => {
@@ -13,7 +13,22 @@ const padRight = (str: string, len: number): string => {
   return str + ' '.repeat(Math.max(0, len - str.length));
 };
 
+const padLeft = (str: string, len: number): string => {
+  return ' '.repeat(Math.max(0, len - str.length)) + str;
+};
+
 export const ui = {
+  // ============ PREMIUM BRANDED BANNER ============
+
+  banner: () => {
+    console.log('');
+    console.log(chalk.hex('#00D395')('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.hex('#00D395')('  │') + chalk.hex('#FAFAFA').bold('        PRIVATE DCA TOOLKIT') + chalk.hex('#00D395')('           │'));
+    console.log(chalk.hex('#00D395')('  │') + chalk.hex('#52525B')('     Solana • Privacy • Automation') + chalk.hex('#00D395')('      │'));
+    console.log(chalk.hex('#00D395')('  ◆─────────────────────────────────────────◆'));
+    console.log('');
+  },
+
   // ============ PREMIUM HEADER ============
 
   header: (title: string, subtitle?: string) => {
@@ -49,7 +64,7 @@ export const ui = {
     console.log('  ' + chalk.hex('#00BA82')('◆') + '  ' + chalk.hex('#FAFAFA')(message));
   },
 
-  // ============ CONFIGURATION PANEL - CLEAN & MINIMAL ============
+  // ============ CONFIGURATION PANEL ============
 
   configPanel: (title: string, items: Array<{ label: string; value: string | boolean; badge?: string }>) => {
     console.log('');
@@ -97,7 +112,7 @@ export const ui = {
     }
   },
 
-  // ============ PREMIUM ALERT BOX - CLEAN BACKGROUND ============
+  // ============ PREMIUM ALERT BOX ============
 
   alertBox: (message: string, type: 'success' | 'warning' | 'error' = 'warning') => {
     const colorMap = {
@@ -112,7 +127,7 @@ export const ui = {
     console.log('');
   },
 
-  // ============ ENTERPRISE TABLES - MINIMAL DESIGN ============
+  // ============ ENTERPRISE TABLES - PREMIUM DESIGN ============
 
   table: (
     headers: string[],
@@ -133,33 +148,43 @@ export const ui = {
 
     console.log('');
 
-    // Top border - minimal
+    // Top border
     const topLine = widths.map(w => '─'.repeat(w + 2)).join('─');
-    console.log(chalk.hex('#1F1F23')('  ┌─' + topLine + '─┐'));
+    console.log(chalk.hex('#1F1F23')('  ┏' + topLine + '┓'));
 
-    // Header row
+    // Header row with background
     const headerCells = headers.map((h, i) => padRight(h, widths[i]));
-    console.log(chalk.hex('#1F1F23')('  │ ') + chalk.hex('#00D395').bold(headerCells.join(chalk.hex('#1F1F23')(' │ '))) + chalk.hex('#1F1F23')(' │'));
+    const headerRow = chalk.hex('#1F1F23')('  ┃ ') + 
+                      chalk.hex('#00D395').bold(headerCells.join(chalk.hex('#1F1F23')(' ┃ '))) + 
+                      chalk.hex('#1F1F23')(' ┃');
+    console.log(headerRow);
 
-    // Separator - subtle
-    console.log(chalk.hex('#1F1F23')('  ├─' + topLine + '─┤'));
+    // Separator
+    console.log(chalk.hex('#1F1F23')('  ┣' + widths.map(w => '━'.repeat(w + 2)).join('┫') + '┫'));
 
-    // Data rows - clean, no alternating colors
-    rows.forEach((row) => {
+    // Data rows with alternating subtle backgrounds
+    rows.forEach((row, idx) => {
       const cells = row.map((cell, i) => {
         const str = padRight(String(cell), widths[i]);
         return highlight.includes(i) ? chalk.hex('#00D395')(str) : chalk.hex('#FAFAFA')(str);
       });
 
-      console.log(chalk.hex('#1F1F23')('  │ ') + cells.join(chalk.hex('#1F1F23')(' │ ')) + chalk.hex('#1F1F23')(' │'));
+      const rowContent = chalk.hex('#1F1F23')('  ┃ ') + cells.join(chalk.hex('#1F1F23')(' ┃ ')) + chalk.hex('#1F1F23')(' ┃');
+      
+      // Subtle alternating background
+      if (idx % 2 === 0) {
+        console.log(chalk.bgHex('#0A0A0D')(rowContent));
+      } else {
+        console.log(rowContent);
+      }
     });
 
     // Bottom border
-    console.log(chalk.hex('#1F1F23')('  └─' + topLine + '─┘'));
+    console.log(chalk.hex('#1F1F23')('  ┗' + topLine + '┛'));
     console.log('');
   },
 
-  // ============ RESULT SUMMARY - BIG IMPACT ============
+  // ============ RESULT SUMMARY ============
 
   resultSummary: (
     title: string,
@@ -264,7 +289,9 @@ export const ui = {
 
   sectionBox: (title: string, content: string[]) => {
     console.log('');
-    console.log(chalk.hex('#00BA82').bold('  ' + title));
+    if (title) {
+      console.log(chalk.hex('#00BA82').bold('  ' + title));
+    }
     console.log('');
 
     content.forEach(line => {
