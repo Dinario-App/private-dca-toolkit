@@ -92,7 +92,7 @@ dcaCommand
       active: true,
     };
 
-    logger.header('Create DCA Schedule', 'Set up automated dollar-cost averaging with privacy');
+    logger.header('Create DCA Schedule', 'Set up automated dollar-cost averaging with privacy', '▸');
 
     // Display configuration panel
     logger.configPanel('Schedule Configuration', [

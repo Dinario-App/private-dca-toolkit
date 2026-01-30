@@ -1,47 +1,39 @@
 import { ui } from './ui';
 
 export const logger = {
-  // Branding
-  banner: () => ui.banner(),
-
-  // Basic messages
+  // Messages
   info: (message: string) => ui.info(message),
   success: (message: string) => ui.success(message),
   warning: (message: string) => ui.warning(message),
   error: (message: string) => ui.error(message),
 
-  // Styled outputs
-  header: (title: string, subtitle?: string, icon?: string) => ui.header(title, subtitle, icon),
+  // Headers
+  header: (title: string, subtitle?: string) => ui.header(title, subtitle),
   subheader: (title: string) => ui.subheader(title),
 
-  // Panels & sections
+  // Panels
   configPanel: (title: string, items: Array<{ label: string; value: string | boolean; badge?: string }>) => ui.configPanel(title, items),
   sectionBox: (title: string, content: string[]) => ui.sectionBox(title, content),
 
-  // Key-value & stats
-  keyValue: (key: string, value: string, color?: 'green' | 'cyan' | 'yellow' | 'red' | 'muted') => ui.keyValue(key, value, color),
+  // Display
+  keyValue: (key: string, value: string, color?: 'green' | 'cyan' | 'yellow' | 'red') => ui.keyValue(key, value, color),
   stat: (label: string, value: string, unit?: string, highlight?: boolean) => ui.stat(label, value, unit, highlight),
-  bigStat: (label: string, value: string | number, unit?: string) => ui.bigStat(label, value, unit),
 
   // Tables & summaries
   table: (headers: string[], rows: (string | number)[][], options?: { colWidths?: number[]; highlight?: number[] }) => ui.table(headers, rows, options),
-  resultSummary: (title: string, items: Array<{ label: string; value: string | number; icon?: string; color?: 'green' | 'yellow' | 'red' | 'cyan' }>) => ui.resultSummary(title, items),
+  resultSummary: (title: string, items: Array<{ label: string; value: string | number; color?: 'green' | 'yellow' | 'red' | 'cyan' }>) => ui.resultSummary(title, items),
 
   // Status & progress
-  statusBadge: (status: 'active' | 'pending' | 'paused' | 'failed', label?: string) => ui.statusBadge(status, label),
+  statusBadge: (status: 'active' | 'pending' | 'paused' | 'failed') => ui.statusBadge(status),
   progressBar: (label: string, current: number, total: number, width?: number) => ui.progressBar(label, current, total, width),
 
   // Alerts
-  alertBox: (message: string, type?: 'success' | 'warning' | 'error') => ui.alertBox(message, type),
-  alert: (message: string, type?: 'info' | 'warning' | 'error' | 'success') => ui.alertBox(message, type as 'success' | 'warning' | 'error'),
+  alertBox: (message: string, type?: 'success' | 'warning' | 'error') => ui.alertBox(message, type as 'success'),
+  alert: (message: string, type?: 'info' | 'warning' | 'error' | 'success') => ui.alertBox(message, type as any),
 
   // Transactions
   txDetails: (options: { hash: string; status: 'success' | 'pending' | 'failed'; amount?: string; from?: string; to?: string; fee?: string; time?: string }) => ui.txDetails(options),
   tx: (signature: string) => ui.txDetails({ hash: signature, status: 'success' }),
-
-  // Dividers
-  divider: (color?: string) => ui.divider(color),
-  thickDivider: (color?: string) => ui.thickDivider(color),
 
   // Utilities
   newline: (count?: number) => ui.newline(count),
