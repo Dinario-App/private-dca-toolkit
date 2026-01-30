@@ -29,7 +29,12 @@ export class HeliusService {
    * Check if the RPC URL is a Helius endpoint
    */
   static isHeliusRpc(url: string): boolean {
-    return url.includes('helius') || url.includes('helius-rpc.com');
+    try {
+      const hostname = new URL(url).hostname;
+      return hostname === 'helius-rpc.com' || hostname.endsWith('.helius-rpc.com');
+    } catch {
+      return false;
+    }
   }
 
   /**
