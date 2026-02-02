@@ -12,8 +12,6 @@
  * - External transfers: Sender anonymous, amount visible (works with any wallet)
  * - 1% relayer fee on all transfers
  * - Supports 17 tokens including SOL, USDC, BONK
- *
- * @see docs/ARCHITECTURE.md for integration details
  */
 
 import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';

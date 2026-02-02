@@ -34,7 +34,7 @@ export { DCAConfig, ScheduleOptions, Schedule, Execution, ExecutionResult, Sched
  * 
  * @example
  * ```typescript
- * import { PrivateDCA } from '@dinario/private-dca-sdk';
+ * import { PrivateDCA } from '@dinario/private-dca-toolkit';
  * 
  * const dca = new PrivateDCA({
  *   walletPath: '/path/to/wallet.json',

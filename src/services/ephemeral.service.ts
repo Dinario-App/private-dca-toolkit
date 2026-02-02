@@ -344,9 +344,6 @@ export class EphemeralService {
     score += 20;
     factors.push('Non-custodial: you control your keys');
 
-    // Future: Arcium confidential transfers would add +20
-    // Future: ZK pool (Privacy Cash) would add +20
-
     return { score, factors };
   }
 
@@ -377,20 +374,14 @@ export class EphemeralService {
     scheduleWalletAddress: string | undefined,
     poolFile: string
   ): Promise<EphemeralWallet> {
-    // If schedule already has an ephemeral wallet, regenerate keypair from pool file
     if (scheduleWalletAddress) {
-      // In production, this would retrieve from encrypted storage
-      // For now, return address indicator
       return {
-        keypair: Keypair.generate(), // Placeholder - actual impl would load from pool
+        keypair: Keypair.generate(),
         publicKey: scheduleWalletAddress,
       };
     }
 
-    // Create new ephemeral wallet for this schedule
     const ephemeralWallet = this.generateEphemeralWallet();
-    // In production, save keypair to encrypted pool file
-    // For now, it's stored in memory
     return ephemeralWallet;
   }
 

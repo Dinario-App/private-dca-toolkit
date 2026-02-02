@@ -22,7 +22,7 @@ export const swapCommand = new Command('swap')
   .option('--private', 'Use Arcium confidential transfer for encrypted amounts', false)
   .option('--no-screen', 'Disable Range compliance screening', false)
   .option('--slippage <bps>', 'Slippage tolerance in basis points', '50')
-  .option('--destination <address>', 'Send output to different address (only with --ephemeral)')
+  .option('--destination <address>', 'Send output to different address (requires privacy enabled)')
   .action(async (options) => {
     const config = loadConfig();
     if (!config || !config.walletPath || !config.rpcUrl) {
@@ -53,7 +53,7 @@ export const swapCommand = new Command('swap')
     }
 
     if (customDestination && !useEphemeral) {
-      logger.error('--destination requires --ephemeral flag');
+      logger.error('--destination requires privacy to be enabled (remove --no-privacy)');
       return;
     }
 

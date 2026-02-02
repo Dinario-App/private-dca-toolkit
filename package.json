@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/web3sly/private-dca-toolkit.git"
+    "url": "git+https://github.com/Dinario-App/private-dca-toolkit.git"
   },
   "keywords": [
     "solana",
@@ -26,9 +26,9 @@
   "author": "Dinario Team",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/web3sly/private-dca-toolkit/issues"
+    "url": "https://github.com/Dinario-App/private-dca-toolkit/issues"
   },
-  "homepage": "https://github.com/web3sly/private-dca-toolkit#readme",
+  "homepage": "https://github.com/Dinario-App/private-dca-toolkit#readme",
   "dependencies": {
     "@arcium-hq/client": "^0.5.4",
     "@jup-ag/api": "^6.0.0",
