@@ -59,61 +59,67 @@ export class JupiterService {
   }
 
   async executeSwap(quote: QuoteResponse, keypair: Keypair): Promise<string> {
-    // Get swap transaction
-    const swapResponse = await fetch(`${this.baseUrl}/swap`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        quoteResponse: quote,
-        userPublicKey: keypair.publicKey.toBase58(),
-        wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        // Use medium priority - 'auto' can spike to very high fees
-        prioritizationFeeLamports: {
-          priorityLevelWithMaxLamports: {
-            maxLamports: 1000000, // Cap at 0.001 SOL max priority fee
-            priorityLevel: 'medium'
-          }
-        },
-      }),
-    });
+    const maxAttempts = 3;
 
-    if (!swapResponse.ok) {
-      const error = await swapResponse.text();
-      throw new Error(`Jupiter swap failed: ${error}`);
-    }
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Get a fresh swap transaction each attempt (fresh blockhash)
+      const swapResponse = await fetch(`${this.baseUrl}/swap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteResponse: quote,
+          userPublicKey: keypair.publicKey.toBase58(),
+          wrapAndUnwrapSol: true,
+          dynamicComputeUnitLimit: true,
+          prioritizationFeeLamports: {
+            priorityLevelWithMaxLamports: {
+              maxLamports: 1000000,
+              priorityLevel: 'medium'
+            }
+          },
+        }),
+      });
 
-    const { swapTransaction, lastValidBlockHeight } =
-      (await swapResponse.json()) as SwapResponse;
-
-    // Deserialize and sign the transaction
-    const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-    const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
-    transaction.sign([keypair]);
-
-    // Send transaction
-    const signature = await this.connection.sendRawTransaction(
-      transaction.serialize(),
-      {
-        skipPreflight: true,
-        maxRetries: 2,
+      if (!swapResponse.ok) {
+        const error = await swapResponse.text();
+        throw new Error(`Jupiter swap failed: ${error}`);
       }
-    );
 
-    // Confirm transaction
-    const confirmation = await this.connection.confirmTransaction(
-      {
-        signature,
-        blockhash: transaction.message.recentBlockhash,
-        lastValidBlockHeight,
-      },
-      'confirmed'
-    );
+      const { swapTransaction, lastValidBlockHeight } =
+        (await swapResponse.json()) as SwapResponse;
 
-    if (confirmation.value.err) {
-      throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+      const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+      const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+      transaction.sign([keypair]);
+
+      const signature = await this.connection.sendRawTransaction(
+        transaction.serialize(),
+        { skipPreflight: true, maxRetries: 3 }
+      );
+
+      try {
+        const confirmation = await this.connection.confirmTransaction(
+          {
+            signature,
+            blockhash: transaction.message.recentBlockhash,
+            lastValidBlockHeight,
+          },
+          'confirmed'
+        );
+
+        if (confirmation.value.err) {
+          throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+        }
+
+        return signature;
+      } catch (error: any) {
+        if (attempt === maxAttempts || !error.message?.includes('block height exceeded')) {
+          throw error;
+        }
+        // Block height exceeded — retry with fresh transaction
+      }
     }
 
-    return signature;
+    throw new Error('Swap failed after retries');
   }
 }

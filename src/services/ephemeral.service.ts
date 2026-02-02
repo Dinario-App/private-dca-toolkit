@@ -5,7 +5,6 @@ import {
   Transaction,
   SystemProgram,
   LAMPORTS_PER_SOL,
-  sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import {
   getAssociatedTokenAddress,
@@ -40,6 +39,44 @@ export class EphemeralService {
 
   constructor(connection: Connection) {
     this.connection = connection;
+  }
+
+  /**
+   * Send a transaction with fresh blockhash and retry logic
+   */
+  private async sendTransaction(
+    transaction: Transaction,
+    signers: Keypair[],
+    maxAttempts: number = 3
+  ): Promise<string> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { blockhash, lastValidBlockHeight } =
+        await this.connection.getLatestBlockhash('confirmed');
+
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = signers[0].publicKey;
+      transaction.signatures = [];
+      transaction.sign(...signers);
+
+      const signature = await this.connection.sendRawTransaction(
+        transaction.serialize(),
+        { skipPreflight: true, maxRetries: 3 }
+      );
+
+      try {
+        await this.connection.confirmTransaction(
+          { signature, blockhash, lastValidBlockHeight },
+          'confirmed'
+        );
+        return signature;
+      } catch (error: any) {
+        if (attempt === maxAttempts || !error.message?.includes('block height exceeded')) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error('Transaction failed after retries');
   }
 
   /**
@@ -127,13 +164,7 @@ export class EphemeralService {
       );
     }
 
-    // Send and confirm transaction
-    const signature = await sendAndConfirmTransaction(
-      this.connection,
-      transaction,
-      [userKeypair],
-      { commitment: 'confirmed' }
-    );
+    const signature = await this.sendTransaction(transaction, [userKeypair]);
 
     return {
       signature,
@@ -202,13 +233,7 @@ export class EphemeralService {
       )
     );
 
-    // Send and confirm
-    const signature = await sendAndConfirmTransaction(
-      this.connection,
-      transaction,
-      [ephemeralKeypair],
-      { commitment: 'confirmed' }
-    );
+    const signature = await this.sendTransaction(transaction, [ephemeralKeypair]);
 
     return {
       signature,
@@ -274,15 +299,8 @@ export class EphemeralService {
     );
 
     try {
-      const signature = await sendAndConfirmTransaction(
-        this.connection,
-        transaction,
-        [ephemeralKeypair],
-        { commitment: 'confirmed' }
-      );
-      return signature;
+      return await this.sendTransaction(transaction, [ephemeralKeypair]);
     } catch {
-      // Recovery failed, dust left behind
       return null;
     }
   }

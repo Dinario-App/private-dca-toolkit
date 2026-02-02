@@ -2,29 +2,15 @@
   "name": "@dinario/private-dca-toolkit",
   "version": "1.0.0",
   "description": "Private DCA (Dollar Cost Averaging) toolkit for Solana using Arcium confidential transfers and Range compliance screening",
-  "main": "dist/sdk/index.js",
-  "types": "dist/sdk/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/sdk/index.js",
-      "require": "./dist/sdk/index.js",
-      "types": "./dist/sdk/index.d.ts"
-    },
-    "./sdk": {
-      "import": "./dist/sdk/index.js",
-      "require": "./dist/sdk/index.js",
-      "types": "./dist/sdk/index.d.ts"
-    }
-  },
+  "main": "dist/cli.js",
   "bin": {
     "private-dca": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "dev": "ts-node src/cli.ts",
-    "examples": "ts-node examples/basic-schedule.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "node -r ts-node/register src/cli.ts",
+    "test": "jest --coverage --forceExit"
   },
   "repository": {
     "type": "git",
@@ -54,11 +40,14 @@
     "dotenv": "^16.4.0",
     "node-cron": "^3.0.3",
     "ora": "^8.0.0",
-    "privacycash": "^1.1.10"
+    "privacycash": "^1.0.17"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
     "@types/node-cron": "^3.0.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.0"
   },
