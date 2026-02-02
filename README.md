@@ -33,7 +33,7 @@ Private DCA stacks five privacy technologies into one CLI:
 | **Arcium** | Confidential transfers | **HOW MUCH** — encrypted amount display |
 | **Range** | Compliance screening | Sanctions check before trading |
 
-Each layer is opt-in. Stack them for maximum privacy or use individually.
+Ephemeral wallets and Range screening are on by default. The other three layers are opt-in flags you can stack for maximum privacy.
 
 ---
 
