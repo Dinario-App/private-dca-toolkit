@@ -108,20 +108,21 @@ dcaCommand
       { label: 'Total Executions', value: schedule.totalExecutions?.toString() || 'Unlimited' },
     ]);
 
-    // Add the schedule
-    schedulerService.addSchedule(schedule, async (s) => {
-      await executeDCA(s, config);
-    });
+    // Save the schedule to disk (CLI exits after; a daemon would run cron)
+    const schedules = schedulerService.loadSchedules();
+    schedules.push(schedule);
+    schedulerService.saveSchedulesToFile(schedules);
 
-    logger.alertBox('DCA schedule created successfully! 🎉', 'success');
-    
-    const nextExec = schedulerService.getNextExecution(schedule.id);
-    if (nextExec) {
-      logger.newline();
-      logger.keyValue('Next Execution', nextExec.toLocaleString(), 'green');
-    }
+    logger.alertBox('DCA schedule created successfully! \u{1F389}', 'success');
 
-    if (options.ephemeral) {
+    const freqMap: Record<string, string> = {
+      hourly: '1 hour', daily: 'tomorrow at 9:00 AM',
+      weekly: 'next Monday at 9:00 AM', monthly: '1st of next month at 9:00 AM',
+    };
+    logger.newline();
+    logger.keyValue('Next Execution', freqMap[schedule.frequency] || schedule.frequency, 'green');
+
+    if (options.privacy) {
       console.log('');
       logger.info('Each DCA execution will use a fresh ephemeral wallet for privacy.');
       logger.info('Your main wallet will not be visible on-chain for swaps.');
