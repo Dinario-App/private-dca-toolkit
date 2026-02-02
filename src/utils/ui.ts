@@ -1,8 +1,7 @@
 import chalk from 'chalk';
 
 /**
- * Premium Enterprise CLI UI for Private DCA
- * Stripe/Vercel-level professional design
+ * CLI UI components for Private DCA
  */
 
 const truncate = (str: string, len: number): string => {
@@ -18,7 +17,7 @@ const padLeft = (str: string, len: number): string => {
 };
 
 export const ui = {
-  // ============ PREMIUM BRANDED BANNER ============
+  // ============ BANNER ============
 
   banner: () => {
     console.log('');
@@ -29,7 +28,7 @@ export const ui = {
     console.log('');
   },
 
-  // ============ PREMIUM HEADER ============
+  // ============ HEADER ============
 
   header: (title: string, subtitle?: string) => {
     console.log('');
@@ -46,7 +45,7 @@ export const ui = {
     console.log('');
   },
 
-  // ============ PREMIUM MESSAGES ============
+  // ============ MESSAGES ============
 
   success: (message: string) => {
     console.log('  ' + chalk.hex('#00D395')('✓') + '  ' + chalk.hex('#FAFAFA')(message));
@@ -112,7 +111,7 @@ export const ui = {
     }
   },
 
-  // ============ PREMIUM ALERT BOX ============
+  // ============ ALERT BOX ============
 
   alertBox: (message: string, type: 'success' | 'warning' | 'error' = 'warning') => {
     const colorMap = {
@@ -127,7 +126,7 @@ export const ui = {
     console.log('');
   },
 
-  // ============ ENTERPRISE TABLES - PREMIUM DESIGN ============
+  // ============ TABLES ============
 
   table: (
     headers: string[],

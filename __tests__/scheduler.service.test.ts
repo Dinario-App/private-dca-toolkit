@@ -25,22 +25,25 @@ describe('SchedulerService', () => {
   let schedulerService: SchedulerService;
   const mockSchedule: DCASchedule = {
     id: 'test-schedule-1',
-    name: 'Test DCA',
     fromToken: 'SOL',
     toToken: 'USDC',
-    amount: 0.1,
+    amountPerExecution: 0.1,
     frequency: 'daily',
     active: true,
     createdAt: new Date().toISOString(),
     useEphemeral: true,
     useZk: false,
     useShadow: false,
-    usePrivate: false,
-    useScreen: false,
+    isPrivate: false,
+    screenAddresses: false,
+    executedCount: 0,
+    slippageBps: 50,
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mockSchedule.active since tests mutate it by reference
+    mockSchedule.active = true;
     schedulerService = new SchedulerService();
   });
 
@@ -74,6 +77,8 @@ describe('SchedulerService', () => {
     it('should remove an existing schedule', async () => {
       const onExecute = jest.fn().mockResolvedValue(undefined);
       schedulerService.addSchedule(mockSchedule, onExecute);
+      // Mock file to contain the schedule so removeSchedule finds it
+      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify([mockSchedule]));
 
       const result = schedulerService.removeSchedule(mockSchedule.id);
 
@@ -91,6 +96,7 @@ describe('SchedulerService', () => {
     it('should pause an active schedule', async () => {
       const onExecute = jest.fn().mockResolvedValue(undefined);
       schedulerService.addSchedule(mockSchedule, onExecute);
+      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify([mockSchedule]));
 
       const result = schedulerService.pauseSchedule(mockSchedule.id);
 
@@ -105,6 +111,7 @@ describe('SchedulerService', () => {
       const pausedSchedule = { ...mockSchedule, active: false };
       const onExecute = jest.fn().mockResolvedValue(undefined);
       schedulerService.addSchedule(pausedSchedule, onExecute);
+      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify([pausedSchedule]));
       schedulerService.pauseSchedule(pausedSchedule.id);
 
       const result = schedulerService.resumeSchedule(pausedSchedule.id);

@@ -2,7 +2,7 @@
 
 > Privacy-first Dollar Cost Averaging for Solana
 
-[![Solana](https://img.shields.io/badge/Solana-Privacy%20Hackathon%202026-9945FF?style=flat&logo=solana)](https://www.colosseum.org/renaissance)
+[![Solana](https://img.shields.io/badge/Solana-Privacy%20Hackathon%202026-9945FF?style=flat&logo=solana)](https://solana.com/privacyhack)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js)](https://nodejs.org)
 
@@ -62,10 +62,10 @@ private-dca config show
 ### Single Swap with Privacy
 
 ```bash
-# Swap SOL → USDC with ephemeral wallet + ShadowWire + Arcium
+# Swap SOL → USDC with ShadowWire + Arcium (ephemeral wallet is on by default)
 private-dca swap \
   --from SOL --to USDC --amount 0.5 \
-  --ephemeral --shadow --private
+  --shadow --private
 ```
 
 Output:
@@ -100,10 +100,10 @@ Private DCA Swap
 ### Schedule Recurring DCA
 
 ```bash
-# DCA $5 USDC → SOL daily for 30 days with privacy
+# DCA $5 USDC → SOL daily for 30 days with ShadowWire encryption
 private-dca dca schedule \
   --from USDC --to SOL --amount 5 \
-  --frequency daily --ephemeral --shadow \
+  --frequency daily --shadow \
   --executions 30
 ```
 
@@ -128,18 +128,18 @@ private-dca dca history
 
 | Flag | Privacy Layer | What It Does |
 |------|-------------|--------------|
-| `--ephemeral` | Ephemeral wallet | Fresh keypair per trade, destroyed after |
+| `--no-privacy` | Disable ephemeral | Use your real wallet directly (less private) |
 | `--zk` | Privacy Cash | Deposit/withdraw through ZK anonymity pool |
 | `--shadow` | ShadowWire | Encrypt amounts with Bulletproofs |
 | `--private` | Arcium | Confidential transfer encryption |
-| `--screen` | Range | Screen addresses against sanctions lists |
+| `--no-screen` | Range | Disable address compliance screening |
 
 Combine them:
 
 ```bash
-# Maximum privacy: all layers
+# Maximum privacy: all layers (ephemeral is already on by default)
 private-dca swap --from SOL --to USDC --amount 1 \
-  --ephemeral --zk --shadow --private --screen
+  --zk --shadow --private
 ```
 
 ---

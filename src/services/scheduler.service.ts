@@ -308,7 +308,6 @@ export class SchedulerService {
     }
 
     // Create new pooled wallet for this schedule
-    // In production, this would be encrypted and stored securely
     const newPooledWalletAddress = `pool_${scheduleId.slice(0, 8)}_${Date.now()}`;
 
     // Update schedule with pooled wallet address

@@ -74,9 +74,31 @@ configCommand
       return;
     }
 
+    // Mask API key in RPC URL for display
+    const maskRpcUrl = (url: string): string => {
+      try {
+        const parsed = new URL(url);
+        if (parsed.searchParams.has('api-key')) {
+          parsed.searchParams.set('api-key', '****');
+          return parsed.toString();
+        }
+        if (parsed.searchParams.has('api_key')) {
+          parsed.searchParams.set('api_key', '****');
+          return parsed.toString();
+        }
+        return url;
+      } catch {
+        return url;
+      }
+    };
+
     logger.header('Private DCA Configuration');
-    logger.keyValue('Wallet Path', config.walletPath || 'Not set');
-    logger.keyValue('RPC URL', config.rpcUrl || 'Not set');
+    // Normalize wallet path for display (replace home dir with ~)
+    const displayWalletPath = config.walletPath
+      ? config.walletPath.replace(process.env.HOME || '', '~')
+      : 'Not set';
+    logger.keyValue('Wallet Path', displayWalletPath);
+    logger.keyValue('RPC URL', maskRpcUrl(config.rpcUrl) || 'Not set');
     logger.keyValue('Network', config.network || 'Not set');
     logger.keyValue('Range API', config.rangeApiKey ? '✓ Configured' : '✗ Not configured');
 
@@ -88,7 +110,8 @@ configCommand
         const connection = getConnection(config.rpcUrl);
         const balance = await getBalance(connection, keypair);
         spinner.stop();
-        logger.keyValue('Public Key', keypair.publicKey.toBase58());
+        const pubkey = keypair.publicKey.toBase58();
+        logger.keyValue('Public Key', `${pubkey.slice(0, 4)}...${pubkey.slice(-4)}`);
         logger.keyValue('SOL Balance', `${balance.toFixed(4)} SOL`);
       } catch (error: any) {
         spinner.fail(`Failed to fetch balance: ${error.message}`);

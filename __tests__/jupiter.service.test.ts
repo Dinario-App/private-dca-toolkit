@@ -136,7 +136,8 @@ describe('JupiterService', () => {
       });
 
       mockVersionedTransaction.serialize.mockReturnValue(mockSerializedTransaction);
-      mockVersionedTransaction.sign.mockImplementation(() => {}); // Mock sign method completion
+      mockVersionedTransaction.sign.mockImplementation(() => {});
+      (mockConnection.sendRawTransaction as jest.Mock).mockResolvedValue(mockSignature);
 
       const signature = await jupiterService.executeSwap(mockQuoteResponse, mockUserKeypair);
 
@@ -146,7 +147,7 @@ describe('JupiterService', () => {
       expect(VersionedTransaction.deserialize).toHaveBeenCalledWith(mockSerializedTransaction);
       expect(mockVersionedTransaction.sign).toHaveBeenCalledWith([mockUserKeypair]);
 
-      expect(mockConnection.sendRawTransaction).toHaveBeenCalledWith(mockSerializedTransaction, { skipPreflight: true, maxRetries: 2 });
+      expect(mockConnection.sendRawTransaction).toHaveBeenCalledWith(mockSerializedTransaction, { skipPreflight: true, maxRetries: 3 });
       expect(mockConnection.confirmTransaction).toHaveBeenCalledWith({
         signature,
         blockhash: 'mockBlockhash',
@@ -178,12 +179,13 @@ describe('JupiterService', () => {
 
       mockVersionedTransaction.serialize.mockReturnValue(mockSerializedTransaction);
       mockVersionedTransaction.sign.mockImplementation(() => {});
+      (mockConnection.sendRawTransaction as jest.Mock).mockResolvedValue('mockSignature');
 
       (mockConnection.confirmTransaction as jest.Mock).mockResolvedValue({ value: { err: 'TransactionFailed' } });
 
       await expect(jupiterService.executeSwap(mockQuoteResponse, mockUserKeypair))
         .rejects
-        .toThrow('Transaction failed: {\"err\":\"TransactionFailed\"}'); // Exact error message check
+        .toThrow('Transaction failed: "TransactionFailed"');
     });
   });
 });

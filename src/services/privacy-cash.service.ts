@@ -10,8 +10,6 @@
  * References:
  * - https://github.com/Privacy-Cash/privacy-cash-sdk
  * - https://www.npmjs.com/package/privacycash
- *
- * @see docs/ARCHITECTURE.md for integration details
  */
 
 import { Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
