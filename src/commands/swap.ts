@@ -40,6 +40,17 @@ export const swapCommand = new Command('swap')
     const shouldScreen = options.screen; // Screening ON by default (disable with --no-screen)
     const customDestination = options.destination;
 
+    // Validate amount and slippage
+    if (isNaN(amount) || amount <= 0) {
+      logger.error('Amount must be a positive number');
+      return;
+    }
+
+    if (isNaN(slippageBps) || slippageBps < 1 || slippageBps > 1000) {
+      logger.error('Slippage must be between 1 and 1000 basis points');
+      return;
+    }
+
     // Validate tokens
     if (!TOKEN_MINTS[fromToken] || !TOKEN_MINTS[toToken]) {
       logger.error(`Invalid token. Supported: ${Object.keys(TOKEN_MINTS).join(', ')}`);

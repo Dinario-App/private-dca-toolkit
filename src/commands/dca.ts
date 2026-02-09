@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { loadConfig, loadKeypair, getConnection } from '../utils/wallet';
+import { loadConfig, loadKeypair, getConnection, WalletConfig } from '../utils/wallet';
 import { logger } from '../utils/logger';
 import { PrivacyCashService } from '../services/privacy-cash.service';
 import { ShadowWireService } from '../services/shadowwire.service';
@@ -44,6 +44,18 @@ dcaCommand
     const amount = parseFloat(options.amount);
     const frequency = options.frequency.toLowerCase() as DCASchedule['frequency'];
 
+    // Validate amount and slippage
+    if (isNaN(amount) || amount <= 0) {
+      logger.error('Amount must be a positive number');
+      return;
+    }
+
+    const slippageBps = parseInt(options.slippage);
+    if (isNaN(slippageBps) || slippageBps < 1 || slippageBps > 1000) {
+      logger.error('Slippage must be between 1 and 1000 basis points');
+      return;
+    }
+
     // Validate tokens
     if (!TOKEN_MINTS[fromToken] || !TOKEN_MINTS[toToken]) {
       logger.error(`Invalid token. Supported: ${Object.keys(TOKEN_MINTS).join(', ')}`);
@@ -85,7 +97,7 @@ dcaCommand
       useZk: options.zk,
       useShadow: options.shadow,
       screenAddresses: options.screen, // Screening ON by default (disable with --no-screen)
-      slippageBps: parseInt(options.slippage),
+      slippageBps,
       totalExecutions: options.executions ? parseInt(options.executions) : undefined,
       executedCount: 0,
       createdAt: new Date().toISOString(),
@@ -350,7 +362,7 @@ dcaCommand
  * but the caller (the `execute` command action) did not catch.
  * Now errors are only logged here; no re-throw.
  */
-async function executeDCA(schedule: DCASchedule, config: any): Promise<void> {
+async function executeDCA(schedule: DCASchedule, config: WalletConfig): Promise<void> {
   logger.header(`Execute DCA Swap`, `${schedule.fromToken} \u2192 ${schedule.toToken}`);
 
   // Show execution plan

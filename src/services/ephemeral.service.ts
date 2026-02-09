@@ -14,6 +14,7 @@ import {
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import { TOKEN_DECIMALS, TOKEN_MINTS } from '../types/index';
+import { HeliusService } from './helius.service';
 
 interface EphemeralWallet {
   keypair: Keypair;
@@ -36,9 +37,30 @@ interface TransferResult {
 
 export class EphemeralService {
   private connection: Connection;
+  private heliusService: HeliusService | null = null;
 
-  constructor(connection: Connection) {
+  constructor(connection: Connection, rpcUrl?: string) {
     this.connection = connection;
+    if (rpcUrl && HeliusService.isHeliusRpc(rpcUrl)) {
+      this.heliusService = new HeliusService(rpcUrl);
+    }
+  }
+
+  /**
+   * Add Helius priority fees to a transaction if available
+   */
+  private async addPriorityFees(transaction: Transaction): Promise<Transaction> {
+    if (!this.heliusService) return transaction;
+    try {
+      const priorityFee = await this.heliusService.getPriorityFeeByAccounts(
+        transaction.instructions.flatMap(ix => ix.keys.map(k => k.pubkey.toBase58())),
+        'Medium'
+      );
+      this.heliusService.addPriorityFeeToTransaction(transaction, priorityFee, 200_000);
+    } catch {
+      // Fallback: no priority fees if estimation fails
+    }
+    return transaction;
   }
 
   /**
@@ -220,6 +242,9 @@ export class EphemeralService {
       );
     }
 
+    // Add priority fees via Helius if available
+    await this.addPriorityFees(transaction);
+
     const signature = await this.sendTransaction(transaction, [userKeypair]);
 
     return {
@@ -289,6 +314,9 @@ export class EphemeralService {
       )
     );
 
+    // Add priority fees via Helius if available
+    await this.addPriorityFees(transaction);
+
     const signature = await this.sendTransaction(transaction, [ephemeralKeypair]);
 
     return {
@@ -346,13 +374,16 @@ export class EphemeralService {
 
     const transferAmount = balance - minBalance;
 
-    const transaction = new Transaction().add(
+    let transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: ephemeralKeypair.publicKey,
         toPubkey: destination,
         lamports: transferAmount,
       })
     );
+
+    // Add priority fees via Helius if available
+    transaction = await this.addPriorityFees(transaction);
 
     try {
       return await this.sendTransaction(transaction, [ephemeralKeypair]);
