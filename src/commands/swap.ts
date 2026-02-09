@@ -1,15 +1,14 @@
 import { Command } from 'commander';
-import { PublicKey } from '@solana/web3.js';
 import { loadConfig, loadKeypair, getConnection } from '../utils/wallet';
 import { logger } from '../utils/logger';
-import { JupiterService } from '../services/jupiter.service';
-import { RangeService } from '../services/range.service';
-import { ArciumService, ArciumSimulated } from '../services/arcium.service';
-import { EphemeralService } from '../services/ephemeral.service';
-import { PrivacyCashService, PrivacyCashSimulated } from '../services/privacy-cash.service';
-import { ShadowWireService, ShadowWireSimulated } from '../services/shadowwire.service';
-import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
-import ora from 'ora';
+import { PrivacyCashService } from '../services/privacy-cash.service';
+import { ShadowWireService } from '../services/shadowwire.service';
+import {
+  SwapExecutorService,
+  SwapProgressEvent,
+} from '../services/swap-executor.service';
+import { TOKEN_MINTS } from '../types/index';
+import ora, { type Ora } from 'ora';
 
 export const swapCommand = new Command('swap')
   .description('Execute a token swap (private by default)')
@@ -89,13 +88,6 @@ export const swapCommand = new Command('swap')
     try {
       const keypair = loadKeypair(config.walletPath);
       const connection = getConnection(config.rpcUrl);
-      const jupiterService = new JupiterService(connection);
-      const ephemeralService = new EphemeralService(connection);
-
-      // Determine final destination
-      const finalDestination = customDestination
-        ? new PublicKey(customDestination)
-        : keypair.publicKey;
 
       // Step 0: Display privacy score
       if (useEphemeral || shouldScreen || useZk || useShadow) {
@@ -128,348 +120,81 @@ export const swapCommand = new Command('swap')
       // Display ZK pool anonymity information if enabled
       if (useZk) {
         const zkInfo = PrivacyCashService.getAnonymitySetInfo(fromToken);
-        console.log('🔐 ZK Pool Anonymity Set:');
+        console.log('\uD83D\uDD10 ZK Pool Anonymity Set:');
         console.log(`   Hidden among: ${zkInfo.minAnonymitySet}+ other users`);
         console.log(`   Pool value: ~${zkInfo.estimatedPoolValue}`);
         console.log(`   Privacy: WHO you are is hidden in the anonymity set`);
         console.log('');
       }
 
-      // Step 1: Screen addresses if enabled
-      if (shouldScreen) {
-        const screenSpinner = ora('Screening addresses with Range...').start();
+      // Execute swap via shared service
+      const executor = new SwapExecutorService(connection);
 
-        if (!config.rangeApiKey) {
-          screenSpinner.warn('Range API key not configured. Skipping screening.');
-        } else {
-          const rangeService = new RangeService(config.rangeApiKey);
-          const result = await rangeService.screenAddress(keypair.publicKey.toBase58());
+      // Manage ora spinners driven by progress callbacks
+      let currentSpinner: Ora | null = null;
 
-          if (result.isSanctioned || result.riskLevel === 'severe') {
-            screenSpinner.fail('Address screening failed: High risk detected');
-            logger.error(`Risk Level: ${result.riskLevel}`);
-            return;
-          }
-          screenSpinner.succeed(`Screening passed (Risk: ${result.riskLevel})`);
-        }
-      }
-
-      // Step 1.5: Privacy Cash ZK deposit if enabled
-      let zkWithdrawAddress: PublicKey | null = null;
-      if (useZk) {
-        const zkSpinner = ora('Checking Privacy Cash availability...').start();
-
-        // Pass the Keypair directly to Privacy Cash (SDK accepts Keypair, Uint8Array, or base58)
-        const privacyCash = new PrivacyCashService(config.rpcUrl, keypair);
-        const availability = await privacyCash.checkAvailability();
-
-        if (!availability.available) {
-          zkSpinner.warn(`Privacy Cash unavailable: ${availability.error}`);
-          logger.info('Falling back to simulated ZK flow for demo...');
-
-          // Use simulated flow for demo
-          const simDeposit = await PrivacyCashSimulated.simulateDeposit(fromToken, amount);
-          console.log(`  ${simDeposit.message}`);
-          console.log(`  Commitment: ${simDeposit.commitment.slice(0, 20)}...`);
-
-          // Generate ephemeral for the "withdrawal"
-          const ephemeral = ephemeralService.generateEphemeralWallet();
-          zkWithdrawAddress = ephemeral.keypair.publicKey;
-
-          const simWithdraw = await PrivacyCashSimulated.simulateWithdraw(
-            fromToken,
-            amount,
-            zkWithdrawAddress.toBase58()
-          );
-          console.log(`  ${simWithdraw.message}`);
-          zkSpinner.succeed('ZK pool flow simulated (SDK not available)');
-        } else {
-          // Real Privacy Cash flow
-          zkSpinner.text = 'Depositing to Privacy Cash ZK pool...';
-
-          let depositResult;
-          if (fromToken === 'SOL') {
-            depositResult = await privacyCash.depositSol(amount);
-          } else {
-            depositResult = await privacyCash.depositSpl(fromToken, amount);
-          }
-
-          if (!depositResult.success) {
-            zkSpinner.fail(`ZK deposit failed: ${depositResult.error}`);
-            return;
-          }
-
-          console.log(`  Tx: ${depositResult.signature?.slice(0, 20)}...`);
-
-          // Generate ephemeral wallet for ZK withdrawal
-          const ephemeral = ephemeralService.generateEphemeralWallet();
-          zkWithdrawAddress = ephemeral.keypair.publicKey;
-
-          zkSpinner.text = 'Withdrawing from ZK pool to ephemeral...';
-
-          let withdrawResult;
-          if (fromToken === 'SOL') {
-            withdrawResult = await privacyCash.withdrawSol(amount, zkWithdrawAddress.toBase58());
-          } else {
-            withdrawResult = await privacyCash.withdrawSpl(fromToken, amount, zkWithdrawAddress.toBase58());
-          }
-
-          if (!withdrawResult.success) {
-            zkSpinner.fail(`ZK withdraw failed: ${withdrawResult.error}`);
-            return;
-          }
-
-          zkSpinner.succeed('ZK pool deposit → withdraw complete');
-          console.log(`  Funds now at ephemeral: ${zkWithdrawAddress.toBase58().slice(0, 8)}...`);
-        }
-      }
-
-      // Prepare swap parameters
-      const inputMint = TOKEN_MINTS[fromToken];
-      const outputMint = TOKEN_MINTS[toToken];
-      const inputDecimals = TOKEN_DECIMALS[fromToken];
-      const inputAmount = Math.floor(amount * Math.pow(10, inputDecimals));
-
-      let swapSignature: string;
-      let outputAmount: number;
-      let ephemeralWallet: { keypair: any; publicKey: string } | null = null; // Track ephemeral for rent recovery
-
-      if (useEphemeral || useZk) {
-        // === EPHEMERAL WALLET FLOW ===
-        // This breaks on-chain linkability between user wallet and swap
-
-        // Step 2a: Generate ephemeral wallet (unless already have one from ZK)
-        let ephemeral;
-        if (useZk && zkWithdrawAddress) {
-          // ZK flow already funded the ephemeral via ZK withdrawal
-          // We need to get the keypair - but in simulated mode we don't have it
-          // For real ZK flow, the funds are already at zkWithdrawAddress
-          // For now, generate new ephemeral and fund it normally for the swap
-          const ephemeralSpinner = ora('Using ephemeral from ZK flow...').start();
-          ephemeral = ephemeralService.generateEphemeralWallet();
-          ephemeralSpinner.succeed(`Ephemeral wallet: ${ephemeral.publicKey.slice(0, 8)}...`);
-
-          // Fund normally (in real ZK flow, funds came from ZK withdrawal)
-          const fundSpinner = ora('Funding ephemeral wallet...').start();
-          const solForFees = ephemeralService.getRecommendedSolFunding();
-          if (fromToken === 'SOL') {
-            await ephemeralService.fundEphemeral(
-              keypair,
-              ephemeral.keypair.publicKey,
-              amount + solForFees
-            );
-          } else {
-            await ephemeralService.fundEphemeral(
-              keypair,
-              ephemeral.keypair.publicKey,
-              solForFees,
-              inputMint,
-              amount
-            );
-          }
-          fundSpinner.succeed('Ephemeral funded');
-        } else {
-          // Standard ephemeral flow
-          const ephemeralSpinner = ora('Generating ephemeral wallet...').start();
-          ephemeral = ephemeralService.generateEphemeralWallet();
-          ephemeralSpinner.succeed(`Ephemeral wallet: ${ephemeral.publicKey.slice(0, 8)}...`);
-
-          // Step 2b: Fund ephemeral wallet
-          const fundSpinner = ora('Funding ephemeral wallet...').start();
-          const solForFees = ephemeralService.getRecommendedSolFunding();
-
-          if (fromToken === 'SOL') {
-            await ephemeralService.fundEphemeral(
-              keypair,
-              ephemeral.keypair.publicKey,
-              amount + solForFees
-            );
-          } else {
-            await ephemeralService.fundEphemeral(
-              keypair,
-              ephemeral.keypair.publicKey,
-              solForFees,
-              inputMint,
-              amount
-            );
-          }
-          fundSpinner.succeed('Ephemeral funded');
-        }
-
-        // Save ephemeral wallet for rent recovery later
-        ephemeralWallet = ephemeral;
-
-        // Step 2c: Get quote for ephemeral
-        const quoteSpinner = ora('Getting best swap route...').start();
-        const quote = await jupiterService.getQuote(inputMint, outputMint, inputAmount, slippageBps);
-        quoteSpinner.succeed('Route found');
-
-        outputAmount = parseInt(quote.outAmount) / Math.pow(10, TOKEN_DECIMALS[toToken]);
-        logger.keyValue('Expected Output', `${outputAmount.toFixed(6)} ${toToken}`);
-        logger.keyValue('Price Impact', `${quote.priceImpactPct}%`);
-
-        // Step 2d: Execute swap from ephemeral
-        const swapSpinner = ora('Executing swap from ephemeral...').start();
-        swapSignature = await jupiterService.executeSwap(quote, ephemeral.keypair);
-        swapSpinner.succeed('Swap executed');
-
-        // Step 2e: Send output to final destination
-        const sendSpinner = ora('Sending output to destination...').start();
-
-        const actualOutput = await ephemeralService.getEphemeralTokenBalance(
-          ephemeral.keypair.publicKey,
-          outputMint
-        );
-
-        if (actualOutput > 0) {
-          await ephemeralService.sendToDestination(
-            ephemeral.keypair,
-            finalDestination,
-            outputMint,
-            actualOutput
-          );
-          sendSpinner.succeed(`Output sent to ${finalDestination.toBase58().slice(0, 8)}...`);
-        } else {
-          sendSpinner.succeed('SOL output (already at ephemeral)');
-        }
-
-        // Step 2f: Recover remaining SOL
-        const recoverSpinner = ora('Recovering dust...').start();
-        const recovered = await ephemeralService.recoverSol(ephemeral.keypair, keypair.publicKey);
-        if (recovered) {
-          recoverSpinner.succeed('Dust recovered');
-        } else {
-          recoverSpinner.info('No dust to recover');
-        }
-      } else {
-        // === STANDARD FLOW ===
-        // Direct swap from user wallet (no privacy)
-
-        const quoteSpinner = ora('Getting best swap route...').start();
-        const quote = await jupiterService.getQuote(inputMint, outputMint, inputAmount, slippageBps);
-        quoteSpinner.succeed('Route found');
-
-        outputAmount = parseInt(quote.outAmount) / Math.pow(10, TOKEN_DECIMALS[toToken]);
-        logger.keyValue('Expected Output', `${outputAmount.toFixed(6)} ${toToken}`);
-        logger.keyValue('Price Impact', `${quote.priceImpactPct}%`);
-
-        const swapSpinner = ora('Executing swap...').start();
-        swapSignature = await jupiterService.executeSwap(quote, keypair);
-        swapSpinner.succeed('Swap executed');
-      }
-
-      // Step 4: Arcium confidential transfer if private mode
-      if (isPrivate) {
-        const arciumSpinner = ora('Checking Arcium SDK availability...').start();
-
-        const arciumService = new ArciumService(connection);
-        const availability = await arciumService.checkAvailability();
-
-        if (!availability.available) {
-          arciumSpinner.warn(`Arcium SDK unavailable: ${availability.error}`);
-          logger.info('Using simulated Arcium for demo...');
-
-          // Simulate Arcium encryption
-          const simEncrypt = await ArciumSimulated.simulateEncrypt(outputAmount);
-          console.log(`  ${simEncrypt.message}`);
-          console.log(`  Ciphertext: ${simEncrypt.ciphertext.slice(0, 30)}...`);
-          arciumSpinner.succeed('Arcium encryption simulated (SDK not installed)');
-        } else {
-          // Real Arcium SDK flow
-          arciumSpinner.text = 'Encrypting with RescueCipher...';
-
-          try {
-            const encryptedAmount = arciumService.encryptAmount(outputAmount);
-            arciumSpinner.succeed(`Amount encrypted: ${encryptedAmount.slice(0, 30)}...`);
-
-            // Show encryption status
-            const status = arciumService.getEncryptionStatus();
-            console.log(`  Cipher: ${status.cipherSuite}`);
-            console.log(`  MXE: ${status.mxeEndpoint}`);
-          } catch (error: any) {
-            arciumSpinner.warn(`Arcium encryption failed: ${error.message}`);
-          }
-        }
-      }
-
-      // Step 5: ShadowWire encrypted transfer if enabled
-      if (useShadow) {
-        const shadowSpinner = ora('Checking ShadowWire availability...').start();
-
-        const shadowWire = new ShadowWireService({ debug: false });
-        const availability = await shadowWire.checkAvailability();
-
-        if (!availability.available) {
-          shadowSpinner.warn(`ShadowWire unavailable: ${availability.error}`);
-          logger.info('Using simulated ShadowWire for demo...');
-
-          // Simulate ShadowWire deposit + transfer
-          const simDeposit = await ShadowWireSimulated.simulateDeposit(toToken, outputAmount);
-          console.log(`  ${simDeposit.message}`);
-
-          const simTransfer = await ShadowWireSimulated.simulateTransfer(
-            toToken,
-            outputAmount,
-            finalDestination.toBase58(),
-            'internal'
-          );
-          console.log(`  ${simTransfer.message}`);
-          shadowSpinner.succeed(`ShadowWire simulated (amount ${simTransfer.amountHidden ? 'hidden' : 'visible'})`);
-        } else {
-          // Real ShadowWire flow
-          shadowSpinner.text = 'Depositing to ShadowWire pool...';
-
-          const depositResult = await shadowWire.deposit(
-            keypair.publicKey.toBase58(),
-            outputAmount,
-            toToken
-          );
-
-          if (!depositResult.success) {
-            // Below minimum or other deposit issue — fall back to simulated
-            shadowSpinner.text = 'Encrypting amount with Bulletproofs...';
-            const simDeposit = await ShadowWireSimulated.simulateDeposit(toToken, outputAmount);
-            console.log(`  ${simDeposit.message}`);
-            const simTransfer = await ShadowWireSimulated.simulateTransfer(
-              toToken, outputAmount, finalDestination.toBase58(), 'internal'
-            );
-            console.log(`  ${simTransfer.message}`);
-            shadowSpinner.succeed(`ShadowWire: amount encrypted with Bulletproofs (${simTransfer.amountHidden ? 'hidden' : 'visible'})`);
-          } else {
-            console.log(`  Deposited to pool: ${depositResult.poolAddress?.slice(0, 16)}...`);
-
-            shadowSpinner.text = 'Executing encrypted transfer...';
-
-            // Internal transfer (amount hidden) to destination
-            const transferResult = await shadowWire.transfer(
-              keypair.publicKey.toBase58(),
-              finalDestination.toBase58(),
-              outputAmount,
-              toToken,
-              'internal' // Amount completely hidden
-            );
-
-            if (!transferResult.success) {
-              shadowSpinner.warn(`ShadowWire transfer failed: ${transferResult.error}`);
+      const result = await executor.execute(
+        keypair,
+        {
+          fromToken,
+          toToken,
+          amount,
+          slippageBps,
+          useEphemeral,
+          useZk,
+          useShadow,
+          isPrivate,
+          shouldScreen,
+          customDestination,
+          rangeApiKey: config.rangeApiKey,
+        },
+        (event: SwapProgressEvent) => {
+          if (event.status === 'start') {
+            if (currentSpinner) currentSpinner.stop();
+            currentSpinner = ora(event.message).start();
+          } else if (event.status === 'success') {
+            if (currentSpinner) {
+              currentSpinner.succeed(event.message);
+              currentSpinner = null;
+            }
+          } else if (event.status === 'warn') {
+            if (currentSpinner) {
+              currentSpinner.warn(event.message);
+              currentSpinner = null;
+            }
+          } else if (event.status === 'fail') {
+            if (currentSpinner) {
+              currentSpinner.fail(event.message);
+              currentSpinner = null;
+            }
+          } else if (event.status === 'info') {
+            if (event.detail) {
+              console.log(`  ${event.detail}`);
             } else {
-              shadowSpinner.succeed(
-                `ShadowWire transfer complete (amount ${transferResult.amountHidden ? '[HIDDEN]' : 'visible'})`
-              );
-              console.log(`  Signature: ${transferResult.signature?.slice(0, 16)}...`);
+              console.log(`  ${event.message}`);
             }
           }
-        }
-      }
+
+          // Print quote detail inline when quote phase succeeds
+          if (event.phase === 'quote' && event.status === 'success' && event.detail) {
+            const parts = event.detail.split(' | ');
+            if (parts.length === 2) {
+              logger.keyValue('Expected Output', parts[0].replace('Expected: ', ''));
+              logger.keyValue('Price Impact', parts[1].replace('Impact: ', ''));
+            }
+          }
+        },
+      );
 
       // Final output
       console.log('');
       logger.success('Swap completed successfully!');
-      logger.tx(swapSignature);
+      logger.tx(result.signature!);
 
       const explorerUrl =
         config.network === 'mainnet-beta'
-          ? `https://orbmarkets.io/tx/${swapSignature}`
-          : `https://solscan.io/tx/${swapSignature}?cluster=devnet`;
+          ? `https://orbmarkets.io/tx/${result.signature}`
+          : `https://solscan.io/tx/${result.signature}?cluster=devnet`;
       logger.keyValue('Explorer', explorerUrl);
 
       if (useEphemeral || useZk) {
@@ -483,29 +208,6 @@ export const swapCommand = new Command('swap')
 
       if (useShadow) {
         logger.keyValue('ShadowWire', 'Transaction amount encrypted with Bulletproofs (hides HOW MUCH)');
-      }
-
-      // Step 6: Auto Rent Recovery (if ephemeral wallet used)
-      // Recovers unused fees from ephemeral wallet → saves 5-10%
-      if (ephemeralWallet && swapSignature) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Network settle
-
-        const recoverSpinner = ora('Recovering unused fees...').start();
-        try {
-          const recovered = await ephemeralService.recoverSol(
-            ephemeralWallet.keypair,
-            finalDestination
-          );
-
-          if (recovered) {
-            recoverSpinner.succeed(`Recovered unused fees (${recovered.slice(0, 20)}...)`);
-            logger.keyValue('Fee Recovery', 'Enabled - saves 5-10% on overall swap cost');
-          } else {
-            recoverSpinner.info('Minimal fees left to recover');
-          }
-        } catch (error: any) {
-          recoverSpinner.warn(`Rent recovery attempted (may fail on devnet): ${error.message}`);
-        }
       }
     } catch (error: any) {
       logger.error(`Swap failed: ${error.message}`);

@@ -1,15 +1,15 @@
 import { Command } from 'commander';
 import { loadConfig, loadKeypair, getConnection } from '../utils/wallet';
 import { logger } from '../utils/logger';
-import { JupiterService } from '../services/jupiter.service';
-import { RangeService } from '../services/range.service';
-import { ArciumService, ArciumSimulated } from '../services/arcium.service';
-import { EphemeralService } from '../services/ephemeral.service';
+import { PrivacyCashService } from '../services/privacy-cash.service';
+import { ShadowWireService } from '../services/shadowwire.service';
 import { SchedulerService } from '../services/scheduler.service';
-import { PrivacyCashService, PrivacyCashSimulated } from '../services/privacy-cash.service';
-import { ShadowWireService, ShadowWireSimulated } from '../services/shadowwire.service';
-import { DCASchedule, TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
-import ora from 'ora';
+import {
+  SwapExecutorService,
+  SwapProgressEvent,
+} from '../services/swap-executor.service';
+import { DCASchedule, TOKEN_MINTS } from '../types/index';
+import ora, { type Ora } from 'ora';
 import { randomUUID } from 'crypto';
 
 const schedulerService = new SchedulerService();
@@ -158,9 +158,9 @@ dcaCommand
 
     // Build table rows
     const rows = schedules.map((schedule) => {
-      const status = schedule.active ? '🟢 Active' : '🔴 Paused';
-      const privacyMode = schedule.useZk ? '🛡️ ZK' : (schedule.useShadow ? '🔐 Shadow' : (schedule.useEphemeral ? '🔒 Eph' : ''));
-      const swap = `${schedule.amountPerExecution} ${schedule.fromToken}→${schedule.toToken}`;
+      const status = schedule.active ? '\uD83D\uDFE2 Active' : '\uD83D\uDD34 Paused';
+      const privacyMode = schedule.useZk ? '\uD83D\uDEE1\uFE0F ZK' : (schedule.useShadow ? '\uD83D\uDD10 Shadow' : (schedule.useEphemeral ? '\uD83D\uDD12 Eph' : ''));
+      const swap = `${schedule.amountPerExecution} ${schedule.fromToken}\u2192${schedule.toToken}`;
       const executions = schedulerService.getExecutions(schedule.id).length;
       const totalExec = schedule.totalExecutions ? `${executions}/${schedule.totalExecutions}` : `${executions}`;
       const nextExec = schedulerService.getNextExecution(schedule.id);
@@ -313,11 +313,11 @@ dcaCommand
 
     // Build execution rows
     const rows = executions.slice(-10).reverse().map((exec) => {
-      const status = exec.success ? '✅ Success' : '❌ Failed';
+      const status = exec.success ? '\u2705 Success' : '\u274C Failed';
       const schedule = schedules.find((s) => s.id === exec.scheduleId);
-      const swapInfo = schedule ? `${schedule.fromToken}→${schedule.toToken}` : '?';
+      const swapInfo = schedule ? `${schedule.fromToken}\u2192${schedule.toToken}` : '?';
       const time = new Date(exec.executedAt).toLocaleTimeString();
-      const txShort = exec.signature ? exec.signature.slice(0, 8) + '...' : '—';
+      const txShort = exec.signature ? exec.signature.slice(0, 8) + '...' : '\u2014';
 
       return [status, time, swapInfo, exec.scheduleId.slice(0, 6), txShort];
     });
@@ -334,7 +334,7 @@ dcaCommand
     const errors = executions.filter(e => e.error);
     if (errors.length > 0) {
       logger.newline();
-      logger.alert(`⚠️ ${errors.length} recent error${errors.length !== 1 ? 's' : ''}`, 'warning');
+      logger.alert(`\u26A0\uFE0F ${errors.length} recent error${errors.length !== 1 ? 's' : ''}`, 'warning');
       errors.slice(-3).forEach(err => {
         if (err.error) {
           logger.keyValue('Error', err.error.slice(0, 50), 'yellow');
@@ -344,14 +344,17 @@ dcaCommand
   });
 
 /**
- * Execute a single DCA swap
- * Supports both standard and ephemeral wallet flows for privacy
+ * Execute a single DCA swap using the shared SwapExecutorService.
+ *
+ * BUG FIX: Previously this function both logged AND re-threw errors,
+ * but the caller (the `execute` command action) did not catch.
+ * Now errors are only logged here; no re-throw.
  */
 async function executeDCA(schedule: DCASchedule, config: any): Promise<void> {
-  logger.header(`Execute DCA Swap`, `${schedule.fromToken} → ${schedule.toToken}`);
+  logger.header(`Execute DCA Swap`, `${schedule.fromToken} \u2192 ${schedule.toToken}`);
 
   // Show execution plan
-  const privacyFeatures = [];
+  const privacyFeatures: string[] = [];
   if (schedule.useZk) privacyFeatures.push('Privacy Cash ZK Pool');
   if (schedule.useEphemeral) privacyFeatures.push('Ephemeral Wallet');
   if (schedule.useShadow) privacyFeatures.push('ShadowWire');
@@ -370,283 +373,69 @@ async function executeDCA(schedule: DCASchedule, config: any): Promise<void> {
   try {
     const keypair = loadKeypair(config.walletPath);
     const connection = getConnection(config.rpcUrl);
-    const jupiterService = new JupiterService(connection);
-    const ephemeralService = new EphemeralService(connection);
+    const executor = new SwapExecutorService(connection);
 
-    // Step 1: Screen addresses if enabled
-    if (schedule.screenAddresses && config.rangeApiKey) {
-      const screenSpinner = ora('Screening addresses...').start();
-      const rangeService = new RangeService(config.rangeApiKey);
-      const result = await rangeService.screenAddress(keypair.publicKey.toBase58());
+    // Manage ora spinners driven by progress callbacks
+    let currentSpinner: Ora | null = null;
 
-      if (result.isSanctioned || result.riskLevel === 'severe') {
-        screenSpinner.fail('Address screening failed');
-        throw new Error(`High risk detected: ${result.riskLevel}`);
-      }
-      screenSpinner.succeed(`Screening passed (Risk: ${result.riskLevel})`);
-    }
-
-    // Step 1.5: Privacy Cash ZK deposit if enabled
-    let zkWithdrawAddress: import('@solana/web3.js').PublicKey | null = null;
-    if (schedule.useZk) {
-      const zkSpinner = ora('Checking Privacy Cash availability...').start();
-
-      // Pass the Keypair directly to Privacy Cash (SDK accepts Keypair, Uint8Array, or base58)
-      const privacyCash = new PrivacyCashService(config.rpcUrl, keypair);
-      const availability = await privacyCash.checkAvailability();
-
-      if (!availability.available) {
-        zkSpinner.warn(`Privacy Cash unavailable: ${availability.error}`);
-        logger.info('Falling back to simulated ZK flow for demo...');
-
-        const simDeposit = await PrivacyCashSimulated.simulateDeposit(schedule.fromToken, schedule.amountPerExecution);
-        console.log(`  ${simDeposit.message}`);
-        console.log(`  Commitment: ${simDeposit.commitment.slice(0, 20)}...`);
-
-        const ephemeral = ephemeralService.generateEphemeralWallet();
-        zkWithdrawAddress = ephemeral.keypair.publicKey;
-
-        const simWithdraw = await PrivacyCashSimulated.simulateWithdraw(
-          schedule.fromToken,
-          schedule.amountPerExecution,
-          zkWithdrawAddress.toBase58()
-        );
-        console.log(`  ${simWithdraw.message}`);
-        zkSpinner.succeed('ZK pool flow simulated (SDK not available)');
-      } else {
-        zkSpinner.text = 'Depositing to Privacy Cash ZK pool...';
-
-        let depositResult;
-        if (schedule.fromToken === 'SOL') {
-          depositResult = await privacyCash.depositSol(schedule.amountPerExecution);
-        } else {
-          depositResult = await privacyCash.depositSpl(schedule.fromToken, schedule.amountPerExecution);
-        }
-
-        if (!depositResult.success) {
-          zkSpinner.fail(`ZK deposit failed: ${depositResult.error}`);
-          throw new Error(`ZK deposit failed: ${depositResult.error}`);
-        }
-
-        console.log(`  Tx: ${depositResult.signature?.slice(0, 20)}...`);
-
-        const ephemeral = ephemeralService.generateEphemeralWallet();
-        zkWithdrawAddress = ephemeral.keypair.publicKey;
-
-        zkSpinner.text = 'Withdrawing from ZK pool to ephemeral...';
-
-        let withdrawResult;
-        if (schedule.fromToken === 'SOL') {
-          withdrawResult = await privacyCash.withdrawSol(schedule.amountPerExecution, zkWithdrawAddress.toBase58());
-        } else {
-          withdrawResult = await privacyCash.withdrawSpl(schedule.fromToken, schedule.amountPerExecution, zkWithdrawAddress.toBase58());
-        }
-
-        if (!withdrawResult.success) {
-          zkSpinner.fail(`ZK withdraw failed: ${withdrawResult.error}`);
-          throw new Error(`ZK withdraw failed: ${withdrawResult.error}`);
-        }
-
-        zkSpinner.succeed('ZK pool deposit → withdraw complete');
-        console.log(`  Funds now at ephemeral: ${zkWithdrawAddress.toBase58().slice(0, 8)}...`);
-      }
-    }
-
-    // Prepare swap parameters
-    const inputMint = TOKEN_MINTS[schedule.fromToken];
-    const outputMint = TOKEN_MINTS[schedule.toToken];
-    const inputDecimals = TOKEN_DECIMALS[schedule.fromToken];
-    const inputAmount = Math.floor(schedule.amountPerExecution * Math.pow(10, inputDecimals));
-
-    let signature: string;
-    let outputAmount: number;
-
-    if (schedule.useZk || schedule.useEphemeral) {
-      // === EPHEMERAL WALLET FLOW ===
-      // Each DCA execution uses a fresh ephemeral wallet
-
-      // Step 2a: Generate ephemeral wallet
-      const ephemeralSpinner = ora('Generating ephemeral wallet...').start();
-      const ephemeral = ephemeralService.generateEphemeralWallet();
-      ephemeralSpinner.succeed(`Ephemeral: ${ephemeral.publicKey.slice(0, 8)}...`);
-
-      // Step 2b: Fund ephemeral wallet
-      const fundSpinner = ora('Funding ephemeral wallet...').start();
-      const solForFees = ephemeralService.getRecommendedSolFunding();
-
-      if (schedule.fromToken === 'SOL') {
-        await ephemeralService.fundEphemeral(
-          keypair,
-          ephemeral.keypair.publicKey,
-          schedule.amountPerExecution + solForFees
-        );
-      } else {
-        await ephemeralService.fundEphemeral(
-          keypair,
-          ephemeral.keypair.publicKey,
-          solForFees,
-          inputMint,
-          schedule.amountPerExecution
-        );
-      }
-      fundSpinner.succeed('Ephemeral funded');
-
-      // Step 2c: Get quote
-      const quoteSpinner = ora('Getting swap quote...').start();
-      const quote = await jupiterService.getQuote(inputMint, outputMint, inputAmount, schedule.slippageBps);
-      quoteSpinner.succeed('Quote received');
-
-      outputAmount = parseInt(quote.outAmount) / Math.pow(10, TOKEN_DECIMALS[schedule.toToken]);
-      logger.keyValue('Output', `${outputAmount.toFixed(6)} ${schedule.toToken}`);
-
-      // Step 2d: Execute swap from ephemeral
-      const swapSpinner = ora('Executing swap from ephemeral...').start();
-      signature = await jupiterService.executeSwap(quote, ephemeral.keypair);
-      swapSpinner.succeed('Swap executed');
-
-      // Step 2e: Send output to user's wallet
-      const sendSpinner = ora('Sending output to your wallet...').start();
-      const actualOutput = await ephemeralService.getEphemeralTokenBalance(
-        ephemeral.keypair.publicKey,
-        outputMint
-      );
-
-      if (actualOutput > 0) {
-        await ephemeralService.sendToDestination(
-          ephemeral.keypair,
-          keypair.publicKey,
-          outputMint,
-          actualOutput
-        );
-        sendSpinner.succeed('Output sent to your wallet');
-      } else {
-        sendSpinner.succeed('SOL output (recovering to your wallet)');
-      }
-
-      // Step 2f: Recover dust
-      const recoverSpinner = ora('Recovering dust...').start();
-      const recovered = await ephemeralService.recoverSol(ephemeral.keypair, keypair.publicKey);
-      if (recovered) {
-        recoverSpinner.succeed('Dust recovered');
-      } else {
-        recoverSpinner.info('No dust to recover');
-      }
-    } else {
-      // === STANDARD FLOW ===
-      // Direct swap from user wallet
-
-      // Step 2: Get quote
-      const quoteSpinner = ora('Getting swap quote...').start();
-      const quote = await jupiterService.getQuote(inputMint, outputMint, inputAmount, schedule.slippageBps);
-      quoteSpinner.succeed('Quote received');
-
-      outputAmount = parseInt(quote.outAmount) / Math.pow(10, TOKEN_DECIMALS[schedule.toToken]);
-      logger.keyValue('Output', `${outputAmount.toFixed(6)} ${schedule.toToken}`);
-
-      // Step 3: Execute swap
-      const swapSpinner = ora('Executing swap...').start();
-      signature = await jupiterService.executeSwap(quote, keypair);
-      swapSpinner.succeed('Swap executed');
-    }
-
-    // Step 4: Arcium confidential transfer if enabled
-    if (schedule.isPrivate) {
-      const arciumSpinner = ora('Checking Arcium SDK availability...').start();
-
-      const arciumService = new ArciumService(connection);
-      const availability = await arciumService.checkAvailability();
-
-      if (!availability.available) {
-        arciumSpinner.warn(`Arcium SDK unavailable: ${availability.error}`);
-        logger.info('Using simulated Arcium for demo...');
-
-        const simEncrypt = await ArciumSimulated.simulateEncrypt(outputAmount);
-        console.log(`  ${simEncrypt.message}`);
-        console.log(`  Ciphertext: ${simEncrypt.ciphertext.slice(0, 30)}...`);
-        arciumSpinner.succeed('Arcium encryption simulated (SDK not installed)');
-      } else {
-        arciumSpinner.text = 'Encrypting with RescueCipher...';
-
-        try {
-          const encryptedAmount = arciumService.encryptAmount(outputAmount);
-          arciumSpinner.succeed(`Amount encrypted: ${encryptedAmount.slice(0, 30)}...`);
-
-          const status = arciumService.getEncryptionStatus();
-          console.log(`  Cipher: ${status.cipherSuite}`);
-        } catch (error: any) {
-          arciumSpinner.warn(`Arcium encryption failed: ${error.message}`);
-        }
-      }
-    }
-
-    // Step 5: ShadowWire encrypted transfer if enabled
-    if (schedule.useShadow) {
-      const shadowSpinner = ora('Checking ShadowWire availability...').start();
-
-      const shadowWire = new ShadowWireService({ debug: false });
-      const availability = await shadowWire.checkAvailability();
-
-      if (!availability.available) {
-        shadowSpinner.warn(`ShadowWire unavailable: ${availability.error}`);
-        logger.info('Using simulated ShadowWire for demo...');
-
-        // Simulate ShadowWire deposit + transfer
-        const simDeposit = await ShadowWireSimulated.simulateDeposit(schedule.toToken, outputAmount);
-        console.log(`  ${simDeposit.message}`);
-
-        const simTransfer = await ShadowWireSimulated.simulateTransfer(
-          schedule.toToken,
-          outputAmount,
-          keypair.publicKey.toBase58(),
-          'internal'
-        );
-        console.log(`  ${simTransfer.message}`);
-        shadowSpinner.succeed(`ShadowWire simulated (amount ${simTransfer.amountHidden ? 'hidden' : 'visible'})`);
-      } else {
-        // Real ShadowWire flow
-        shadowSpinner.text = 'Depositing to ShadowWire pool...';
-
-        const depositResult = await shadowWire.deposit(
-          keypair.publicKey.toBase58(),
-          outputAmount,
-          schedule.toToken
-        );
-
-        if (!depositResult.success) {
-          shadowSpinner.warn(`ShadowWire deposit failed: ${depositResult.error}`);
-        } else {
-          console.log(`  Deposited to pool: ${depositResult.poolAddress?.slice(0, 16)}...`);
-
-          shadowSpinner.text = 'Executing encrypted transfer...';
-
-          // Internal transfer (amount hidden)
-          const transferResult = await shadowWire.transfer(
-            keypair.publicKey.toBase58(),
-            keypair.publicKey.toBase58(),
-            outputAmount,
-            schedule.toToken,
-            'internal'
-          );
-
-          if (!transferResult.success) {
-            shadowSpinner.warn(`ShadowWire transfer failed: ${transferResult.error}`);
+    const result = await executor.execute(
+      keypair,
+      {
+        fromToken: schedule.fromToken,
+        toToken: schedule.toToken,
+        amount: schedule.amountPerExecution,
+        slippageBps: schedule.slippageBps,
+        useEphemeral: schedule.useEphemeral ?? false,
+        useZk: schedule.useZk ?? false,
+        useShadow: schedule.useShadow ?? false,
+        isPrivate: schedule.isPrivate,
+        shouldScreen: schedule.screenAddresses,
+        rangeApiKey: config.rangeApiKey,
+      },
+      (event: SwapProgressEvent) => {
+        if (event.status === 'start') {
+          if (currentSpinner) currentSpinner.stop();
+          currentSpinner = ora(event.message).start();
+        } else if (event.status === 'success') {
+          if (currentSpinner) {
+            currentSpinner.succeed(event.message);
+            currentSpinner = null;
+          }
+        } else if (event.status === 'warn') {
+          if (currentSpinner) {
+            currentSpinner.warn(event.message);
+            currentSpinner = null;
+          }
+        } else if (event.status === 'fail') {
+          if (currentSpinner) {
+            currentSpinner.fail(event.message);
+            currentSpinner = null;
+          }
+        } else if (event.status === 'info') {
+          if (event.detail) {
+            console.log(`  ${event.detail}`);
           } else {
-            shadowSpinner.succeed(
-              `ShadowWire transfer complete (amount ${transferResult.amountHidden ? '[HIDDEN]' : 'visible'})`
-            );
-            console.log(`  Signature: ${transferResult.signature?.slice(0, 16)}...`);
+            console.log(`  ${event.message}`);
           }
         }
-      }
-    }
+
+        // Print output info when quote succeeds
+        if (event.phase === 'quote' && event.status === 'success' && event.detail) {
+          const parts = event.detail.split(' | ');
+          if (parts.length >= 1) {
+            logger.keyValue('Output', parts[0].replace('Expected: ', ''));
+          }
+        }
+      },
+    );
 
     logger.newline();
-    logger.alert('DCA execution complete! 🎉', 'success');
+    logger.alert('DCA execution complete! \uD83C\uDF89', 'success');
 
     // Build summary items
     const summaryItems = [
-      { label: 'Transaction', value: signature.slice(0, 16) + '...', color: 'cyan' as const },
-      { label: 'Output', value: `${outputAmount.toFixed(6)} ${schedule.toToken}`, color: 'green' as const },
+      { label: 'Transaction', value: (result.signature ?? '').slice(0, 16) + '...', color: 'cyan' as const },
+      { label: 'Output', value: `${(result.outputAmount ?? 0).toFixed(6)} ${schedule.toToken}`, color: 'green' as const },
     ];
 
     if (schedule.useZk) {
@@ -661,7 +450,8 @@ async function executeDCA(schedule: DCASchedule, config: any): Promise<void> {
 
     logger.summary('Execution Result', summaryItems);
   } catch (error: any) {
+    // BUG FIX: Only log the error, do NOT re-throw.
+    // The caller (CLI action) does not catch, so re-throwing caused unhandled rejections.
     logger.error(`DCA execution failed: ${error.message}`);
-    throw error;
   }
 }

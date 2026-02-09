@@ -13,7 +13,7 @@ import {
   getAccount,
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
-import { TOKEN_DECIMALS } from '../types/index';
+import { TOKEN_DECIMALS, TOKEN_MINTS } from '../types/index';
 
 interface EphemeralWallet {
   keypair: Keypair;
@@ -60,7 +60,7 @@ export class EphemeralService {
 
       const signature = await this.connection.sendRawTransaction(
         transaction.serialize(),
-        { skipPreflight: true, maxRetries: 3 }
+        { skipPreflight: false, maxRetries: 3 }
       );
 
       try {
@@ -89,6 +89,62 @@ export class EphemeralService {
       keypair,
       publicKey: keypair.publicKey.toBase58(),
     };
+  }
+
+  /**
+   * Check if the user's wallet has sufficient balance to fund the ephemeral wallet.
+   * Checks SOL balance and optionally token balance.
+   *
+   * @param userKeypair - The user's main wallet
+   * @param solNeeded - Total SOL needed (swap amount if SOL + fees + rent)
+   * @param tokenMint - Optional: SPL token mint to check
+   * @param tokenAmountNeeded - Optional: Amount of tokens needed
+   * @throws Error with clear message if insufficient balance
+   */
+  async checkSufficientBalance(
+    userKeypair: Keypair,
+    solNeeded: number,
+    tokenMint?: string,
+    tokenAmountNeeded?: number
+  ): Promise<void> {
+    // Check SOL balance
+    const solBalance = await this.connection.getBalance(userKeypair.publicKey);
+    const solBalanceInSol = solBalance / LAMPORTS_PER_SOL;
+
+    if (solBalanceInSol < solNeeded) {
+      throw new Error(
+        `Insufficient SOL balance: have ${solBalanceInSol.toFixed(6)} SOL, need ${solNeeded.toFixed(6)} SOL`
+      );
+    }
+
+    // Check token balance if swapping from a token (not SOL)
+    if (tokenMint && tokenAmountNeeded && tokenAmountNeeded > 0) {
+      const mintPubkey = new PublicKey(tokenMint);
+      const userAta = await getAssociatedTokenAddress(mintPubkey, userKeypair.publicKey);
+
+      try {
+        const account = await getAccount(this.connection, userAta);
+        const tokenSymbol = this.getTokenSymbolFromMint(tokenMint);
+        const decimals = TOKEN_DECIMALS[tokenSymbol] || 9;
+        const tokenBalance = Number(account.amount) / Math.pow(10, decimals);
+
+        if (tokenBalance < tokenAmountNeeded) {
+          throw new Error(
+            `Insufficient ${tokenSymbol} balance: have ${tokenBalance.toFixed(6)} ${tokenSymbol}, need ${tokenAmountNeeded.toFixed(6)} ${tokenSymbol}`
+          );
+        }
+      } catch (error: any) {
+        // If it's our own insufficient balance error, rethrow it
+        if (error.message.startsWith('Insufficient')) {
+          throw error;
+        }
+        // Token account doesn't exist — no balance at all
+        const tokenSymbol = this.getTokenSymbolFromMint(tokenMint);
+        throw new Error(
+          `Insufficient ${tokenSymbol} balance: have 0 ${tokenSymbol}, need ${tokenAmountNeeded.toFixed(6)} ${tokenSymbol}`
+        );
+      }
+    }
   }
 
   /**
@@ -355,6 +411,8 @@ export class EphemeralService {
       'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263': 'BONK',
       'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm': 'WIF',
       'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN': 'JUP',
+      '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R': 'RAY',
+      'orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE': 'ORCA',
     };
 
     return TOKEN_MINTS[mint] || 'UNKNOWN';
@@ -362,25 +420,26 @@ export class EphemeralService {
 
   /**
    * Account Pooling: Get or create a reusable ephemeral wallet for a DCA schedule
-   * Reusing the same wallet across multiple swaps amortizes rent costs (~0.002 SOL)
    *
-   * @param userKeypair - User's main wallet
-   * @param scheduleWalletAddress - Stored ephemeral wallet address from schedule
-   * @param poolFile - Path to store pooled wallet keys (encrypted in production)
-   * @returns Ephemeral wallet to use for this swap
+   * TODO: Implement persistent wallet storage. Currently, pooled wallets cannot be
+   * restored from `scheduleWalletAddress` alone because the secret key is not persisted.
+   * Until a secure key storage mechanism is added (e.g., encrypted keyfile at `poolFile`),
+   * this method always generates a fresh ephemeral wallet. The `scheduleWalletAddress`
+   * parameter is intentionally ignored to avoid returning a mismatched keypair/publicKey
+   * pair that would cause transaction signing failures.
+   *
+   * @param _userKeypair - User's main wallet (unused until persistence is implemented)
+   * @param _scheduleWalletAddress - Stored ephemeral wallet address from schedule (unused)
+   * @param _poolFile - Path to store pooled wallet keys (unused)
+   * @returns Fresh ephemeral wallet with matching keypair and publicKey
    */
   async getOrCreatePooledWallet(
-    userKeypair: Keypair,
-    scheduleWalletAddress: string | undefined,
-    poolFile: string
+    _userKeypair: Keypair,
+    _scheduleWalletAddress: string | undefined,
+    _poolFile: string
   ): Promise<EphemeralWallet> {
-    if (scheduleWalletAddress) {
-      return {
-        keypair: Keypair.generate(),
-        publicKey: scheduleWalletAddress,
-      };
-    }
-
+    // Always generate a fresh wallet so keypair and publicKey are guaranteed to match.
+    // Reuse of a stored address requires persisting the secret key, which is not yet implemented.
     const ephemeralWallet = this.generateEphemeralWallet();
     return ephemeralWallet;
   }

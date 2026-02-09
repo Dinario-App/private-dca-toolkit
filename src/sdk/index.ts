@@ -4,15 +4,12 @@
  */
 
 import { EventEmitter } from 'events';
-import { loadConfig, loadKeypair, getConnection } from '../utils/wallet';
+import { loadKeypair, getConnection } from '../utils/wallet';
 import { SchedulerService } from '../services/scheduler.service';
-import { JupiterService } from '../services/jupiter.service';
-import { EphemeralService } from '../services/ephemeral.service';
-import { ArciumService } from '../services/arcium.service';
-import { PrivacyCashService } from '../services/privacy-cash.service';
-import { ShadowWireService } from '../services/shadowwire.service';
-import { RangeService } from '../services/range.service';
-import { DCASchedule, TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
+import {
+  SwapExecutorService,
+} from '../services/swap-executor.service';
+import { DCASchedule, TOKEN_MINTS } from '../types/index';
 import { randomUUID } from 'crypto';
 
 import type {
@@ -29,18 +26,18 @@ export { DCAConfig, ScheduleOptions, Schedule, Execution, ExecutionResult, Sched
 
 /**
  * Private DCA Toolkit SDK
- * 
+ *
  * Easy-to-use TypeScript SDK for managing private DCA schedules on Solana
- * 
+ *
  * @example
  * ```typescript
  * import { PrivateDCA } from '@dinario/private-dca-toolkit';
- * 
+ *
  * const dca = new PrivateDCA({
  *   walletPath: '/path/to/wallet.json',
  *   rpcUrl: 'https://api.mainnet-beta.solana.com'
  * });
- * 
+ *
  * const schedule = await dca.schedule({
  *   fromToken: 'USDC',
  *   toToken: 'SOL',
@@ -48,7 +45,7 @@ export { DCAConfig, ScheduleOptions, Schedule, Execution, ExecutionResult, Sched
  *   frequency: 'weekly',
  *   privacy: { zk: true, ephemeral: true }
  * });
- * 
+ *
  * schedule.on('executed', (event) => {
  *   console.log('DCA executed:', event.execution.signature);
  * });
@@ -57,17 +54,12 @@ export { DCAConfig, ScheduleOptions, Schedule, Execution, ExecutionResult, Sched
 export class PrivateDCA extends EventEmitter {
   private config: DCAConfig;
   private schedulerService: SchedulerService;
-  private jupiterService: JupiterService;
   private initialized = false;
 
   constructor(config: DCAConfig) {
     super();
     this.config = config;
     this.schedulerService = new SchedulerService();
-
-    // Initialize Jupiter service with dummy connection (will be replaced on actual execution)
-    const dummyConnection = getConnection(config.rpcUrl);
-    this.jupiterService = new JupiterService(dummyConnection);
   }
 
   /**
@@ -176,7 +168,7 @@ export class PrivateDCA extends EventEmitter {
 
     try {
       const result = await this.executeSchedule(schedule);
-      
+
       this.emit('schedule:executed', {
         type: 'executed',
         schedule: this.formatSchedule(schedule),
@@ -186,7 +178,7 @@ export class PrivateDCA extends EventEmitter {
       return result;
     } catch (error: any) {
       const errorMsg = error.message || 'Unknown error';
-      
+
       this.emit('schedule:failed', {
         type: 'failed',
         schedule: this.formatSchedule(schedule),
@@ -280,7 +272,7 @@ export class PrivateDCA extends EventEmitter {
     if (!this.initialized) await this.initialize();
 
     const schedules = this.schedulerService.loadSchedules();
-    
+
     const results: ScheduleHistory[] = [];
 
     if (id) {
@@ -332,73 +324,39 @@ export class PrivateDCA extends EventEmitter {
   }
 
   /**
-   * Internal: Execute a schedule
+   * Internal: Execute a schedule using the shared SwapExecutorService.
+   *
+   * Now includes all privacy features (ZK, ShadowWire, Arcium, screening)
+   * that were previously missing from the SDK path.
    */
   private async executeSchedule(schedule: DCASchedule): Promise<ExecutionResult> {
     try {
       const keypair = loadKeypair(this.config.walletPath);
       const connection = getConnection(this.config.rpcUrl);
-      const jupiterService = new JupiterService(connection);
-      const ephemeralService = new EphemeralService(connection);
+      const executor = new SwapExecutorService(connection);
 
-      // Get quote
-      const inputMint = TOKEN_MINTS[schedule.fromToken];
-      const outputMint = TOKEN_MINTS[schedule.toToken];
-      const inputDecimals = TOKEN_DECIMALS[schedule.fromToken];
-      const inputAmount = Math.floor(schedule.amountPerExecution * Math.pow(10, inputDecimals));
-
-      const quote = await jupiterService.getQuote(inputMint, outputMint, inputAmount, schedule.slippageBps);
-      
-      // Execute swap
-      let signature: string;
-      if (schedule.useEphemeral || schedule.useZk) {
-        const ephemeral = ephemeralService.generateEphemeralWallet();
-        const solForFees = ephemeralService.getRecommendedSolFunding();
-
-        if (schedule.fromToken === 'SOL') {
-          await ephemeralService.fundEphemeral(
-            keypair,
-            ephemeral.keypair.publicKey,
-            schedule.amountPerExecution + solForFees
-          );
-        } else {
-          await ephemeralService.fundEphemeral(
-            keypair,
-            ephemeral.keypair.publicKey,
-            solForFees,
-            inputMint,
-            schedule.amountPerExecution
-          );
-        }
-
-        signature = await jupiterService.executeSwap(quote, ephemeral.keypair);
-
-        const actualOutput = await ephemeralService.getEphemeralTokenBalance(
-          ephemeral.keypair.publicKey,
-          outputMint
-        );
-
-        if (actualOutput > 0) {
-          await ephemeralService.sendToDestination(
-            ephemeral.keypair,
-            keypair.publicKey,
-            outputMint,
-            actualOutput
-          );
-        }
-
-        await ephemeralService.recoverSol(ephemeral.keypair, keypair.publicKey);
-      } else {
-        signature = await jupiterService.executeSwap(quote, keypair);
-      }
-
-      const outputAmount = parseInt(quote.outAmount) / Math.pow(10, TOKEN_DECIMALS[schedule.toToken]);
+      const result = await executor.execute(
+        keypair,
+        {
+          fromToken: schedule.fromToken,
+          toToken: schedule.toToken,
+          amount: schedule.amountPerExecution,
+          slippageBps: schedule.slippageBps,
+          useEphemeral: schedule.useEphemeral ?? false,
+          useZk: schedule.useZk ?? false,
+          useShadow: schedule.useShadow ?? false,
+          isPrivate: schedule.isPrivate,
+          shouldScreen: schedule.screenAddresses,
+          rangeApiKey: this.config.rangeApiKey,
+        },
+        // No progress callback for SDK -- runs silently
+      );
 
       return {
         success: true,
-        signature,
-        amount: outputAmount,
-        outputToken: schedule.toToken,
+        signature: result.signature,
+        amount: result.outputAmount,
+        outputToken: result.outputToken,
       };
     } catch (error: any) {
       throw new Error(`Execution failed: ${error.message}`);

@@ -105,12 +105,30 @@ export class ArciumService {
     };
   }
 
-  encryptAmount(amount: number): string {
-    return `[RESCUE: 0x${Buffer.alloc(32).toString('hex').slice(0, 64)}]`;
+  encryptAmount(amount: number): string | null {
+    if (!this.isInitialized || !this.RescueCipherClass) {
+      return null;
+    }
+
+    try {
+      const nonce = randomBytes(16);
+      const plaintext = [BigInt(Math.floor(amount * 1e9))];
+      const encryptionKey = randomBytes(32);
+      const cipher = new this.RescueCipherClass(encryptionKey);
+      const ciphertext = cipher.encrypt(plaintext, nonce);
+      return `[RESCUE: 0x${Buffer.from(ciphertext.toString(16)).toString('hex').slice(0, 64)}]`;
+    } catch {
+      return null;
+    }
   }
 
-  async checkAvailability() {
-    return { available: true, error: undefined };
+  async checkAvailability(): Promise<{ available: boolean; error?: string }> {
+    try {
+      await this.initialize();
+      return { available: true, error: undefined };
+    } catch (error: any) {
+      return { available: false, error: `Arcium SDK not available: ${error.message}` };
+    }
   }
 
   getPrivacyMetrics(useConfidential: boolean, useEphemeral: boolean) {
