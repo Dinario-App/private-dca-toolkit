@@ -12,8 +12,8 @@ import ora, { type Ora } from 'ora';
 
 export const swapCommand = new Command('swap')
   .description('Execute a token swap (private by default)')
-  .requiredOption('--from <token>', 'Source token (SOL, USDC, USDT, BONK, WIF, JUP)')
-  .requiredOption('--to <token>', 'Destination token (SOL, USDC, USDT, BONK, WIF, JUP)')
+  .requiredOption('--from <token>', 'Source token (SOL, USDC, USDT, BONK, WIF, JUP, RAY, ORCA)')
+  .requiredOption('--to <token>', 'Destination token (SOL, USDC, USDT, BONK, WIF, JUP, RAY, ORCA)')
   .requiredOption('--amount <number>', 'Amount to swap')
   .option('--no-privacy', 'Disable ephemeral wallet (expose your wallet on-chain)', false)
   .option('--zk', 'Use Privacy Cash ZK pool for maximum anonymity (requires Node 24+)', false)
