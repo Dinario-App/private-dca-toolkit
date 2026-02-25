@@ -21,7 +21,6 @@ export interface ScheduleOptions {
 export interface PrivacyOptions {
   ephemeral?: boolean;
   zk?: boolean;
-  shadowwire?: boolean;
   arcium?: boolean;
   screenAddresses?: boolean;
 }
@@ -34,7 +33,6 @@ export interface Schedule {
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
   useEphemeral: boolean;
   useZk: boolean;
-  useShadow: boolean;
   isPrivate: boolean;
   screenAddresses: boolean;
   slippageBps: number;

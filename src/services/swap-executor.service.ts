@@ -10,7 +10,6 @@
  * Supports all privacy layers:
  *   - Ephemeral wallets (on-chain linkability breaking)
  *   - Privacy Cash ZK pools (anonymity set)
- *   - ShadowWire Bulletproofs (encrypted amounts)
  *   - Arcium RescueCipher (confidential transfers)
  *   - Range compliance screening
  */
@@ -21,11 +20,11 @@ import { RangeService } from './range.service';
 import { ArciumService, ArciumSimulated } from './arcium.service';
 import { EphemeralService } from './ephemeral.service';
 import { PrivacyCashService, PrivacyCashSimulated } from './privacy-cash.service';
-import { ShadowWireService, ShadowWireSimulated } from './shadowwire.service';
+
 import { TOKEN_MINTS, TOKEN_DECIMALS } from '../types/index';
 
 // Re-export simulated classes so consumers can reference them if needed
-export { ArciumSimulated, PrivacyCashSimulated, ShadowWireSimulated };
+export { ArciumSimulated, PrivacyCashSimulated };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,8 +45,6 @@ export interface SwapExecutionParams {
   useEphemeral: boolean;
   /** Use Privacy Cash ZK pool for anonymity set */
   useZk: boolean;
-  /** Use ShadowWire for Bulletproof-encrypted amounts */
-  useShadow: boolean;
   /** Use Arcium RescueCipher for confidential transfers */
   isPrivate: boolean;
   /** Enable Range compliance screening */
@@ -86,7 +83,6 @@ export interface SwapExecutionResult {
  *   'send-output'    - Sending output to destination
  *   'recover-sol'    - Recovering SOL dust from ephemeral
  *   'arcium'         - Arcium confidential encryption
- *   'shadowwire'     - ShadowWire encrypted transfer
  */
 export type SwapProgressPhase =
   | 'screening'
@@ -98,8 +94,7 @@ export type SwapProgressPhase =
   | 'swap'
   | 'send-output'
   | 'recover-sol'
-  | 'arcium'
-  | 'shadowwire';
+  | 'arcium';
 
 export type SwapProgressStatus = 'start' | 'success' | 'warn' | 'fail' | 'info';
 
@@ -146,7 +141,6 @@ export class SwapExecutorService {
       slippageBps,
       useEphemeral,
       useZk,
-      useShadow,
       isPrivate,
       shouldScreen,
       customDestination,
@@ -218,19 +212,6 @@ export class SwapExecutorService {
     // ------------------------------------------------------------------
     if (isPrivate) {
       await this.runArciumEncryption(outputAmount, progress);
-    }
-
-    // ------------------------------------------------------------------
-    // Step 5: ShadowWire encrypted transfer
-    // ------------------------------------------------------------------
-    if (useShadow) {
-      await this.runShadowWireTransfer(
-        keypair,
-        finalDestination,
-        toToken,
-        outputAmount,
-        progress,
-      );
     }
 
     return {
@@ -497,92 +478,4 @@ export class SwapExecutorService {
     }
   }
 
-  private async runShadowWireTransfer(
-    keypair: Keypair,
-    finalDestination: PublicKey,
-    toToken: string,
-    outputAmount: number,
-    progress: ProgressCallback,
-  ): Promise<void> {
-    progress({ phase: 'shadowwire', status: 'start', message: 'Checking ShadowWire availability...' });
-
-    const shadowWire = new ShadowWireService({ debug: false });
-    const availability = await shadowWire.checkAvailability();
-
-    if (!availability.available) {
-      progress({ phase: 'shadowwire', status: 'warn', message: `ShadowWire unavailable: ${availability.error}` });
-      progress({ phase: 'shadowwire', status: 'info', message: 'Using simulated ShadowWire for demo...' });
-
-      const simDeposit = await ShadowWireSimulated.simulateDeposit(toToken, outputAmount);
-      progress({ phase: 'shadowwire', status: 'info', message: simDeposit.message });
-
-      const simTransfer = await ShadowWireSimulated.simulateTransfer(
-        toToken,
-        outputAmount,
-        finalDestination.toBase58(),
-        'internal',
-      );
-      progress({
-        phase: 'shadowwire',
-        status: 'success',
-        message: `ShadowWire simulated (amount ${simTransfer.amountHidden ? 'hidden' : 'visible'})`,
-        detail: simTransfer.message,
-      });
-    } else {
-      // Real ShadowWire flow
-      progress({ phase: 'shadowwire', status: 'start', message: 'Depositing to ShadowWire pool...' });
-
-      const depositResult = await shadowWire.deposit(
-        keypair.publicKey.toBase58(),
-        outputAmount,
-        toToken,
-      );
-
-      if (!depositResult.success) {
-        // Fallback to simulated on deposit failure
-        progress({ phase: 'shadowwire', status: 'info', message: 'Encrypting amount with Bulletproofs...' });
-        const simDeposit = await ShadowWireSimulated.simulateDeposit(toToken, outputAmount);
-        progress({ phase: 'shadowwire', status: 'info', message: simDeposit.message });
-        const simTransfer = await ShadowWireSimulated.simulateTransfer(
-          toToken,
-          outputAmount,
-          finalDestination.toBase58(),
-          'internal',
-        );
-        progress({
-          phase: 'shadowwire',
-          status: 'success',
-          message: `ShadowWire: amount encrypted with Bulletproofs (${simTransfer.amountHidden ? 'hidden' : 'visible'})`,
-          detail: simTransfer.message,
-        });
-      } else {
-        progress({
-          phase: 'shadowwire',
-          status: 'info',
-          message: `Deposited to pool: ${depositResult.poolAddress?.slice(0, 16)}...`,
-        });
-
-        progress({ phase: 'shadowwire', status: 'start', message: 'Executing encrypted transfer...' });
-
-        const transferResult = await shadowWire.transfer(
-          keypair.publicKey.toBase58(),
-          finalDestination.toBase58(),
-          outputAmount,
-          toToken,
-          'internal',
-        );
-
-        if (!transferResult.success) {
-          progress({ phase: 'shadowwire', status: 'warn', message: `ShadowWire transfer failed: ${transferResult.error}` });
-        } else {
-          progress({
-            phase: 'shadowwire',
-            status: 'success',
-            message: `ShadowWire transfer complete (amount ${transferResult.amountHidden ? '[HIDDEN]' : 'visible'})`,
-            detail: `Signature: ${transferResult.signature?.slice(0, 16)}...`,
-          });
-        }
-      }
-    }
-  }
 }

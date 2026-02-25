@@ -1,7 +1,7 @@
 #!/bin/bash
 # Weekly DCA Example - Scheduled token purchases
 #
-# Sets up a weekly DCA: $50 USDC → SOL
+# Sets up a weekly DCA: $50 USDC -> SOL
 # Ephemeral wallet is on by default for each execution.
 
 # Ensure you've configured the CLI first:
@@ -13,7 +13,6 @@ private-dca dca schedule \
   --to SOL \
   --amount 50 \
   --frequency weekly \
-  --shadow \
   --slippage 100
 
 echo ""

@@ -2,7 +2,6 @@ import { Command } from 'commander';
 import { loadConfig, loadKeypair, getConnection } from '../utils/wallet';
 import { logger } from '../utils/logger';
 import { PrivacyCashService } from '../services/privacy-cash.service';
-import { ShadowWireService } from '../services/shadowwire.service';
 import {
   SwapExecutorService,
   SwapProgressEvent,
@@ -17,7 +16,6 @@ export const swapCommand = new Command('swap')
   .requiredOption('--amount <number>', 'Amount to swap')
   .option('--no-privacy', 'Disable ephemeral wallet (expose your wallet on-chain)', false)
   .option('--zk', 'Use Privacy Cash ZK pool for maximum anonymity (requires Node 24+)', false)
-  .option('--shadow', 'Use ShadowWire for encrypted amounts (Bulletproofs via Radr Labs)', false)
   .option('--private', 'Use Arcium confidential transfer for encrypted amounts', false)
   .option('--no-screen', 'Disable Range compliance screening', false)
   .option('--slippage <bps>', 'Slippage tolerance in basis points', '50')
@@ -35,7 +33,6 @@ export const swapCommand = new Command('swap')
     const slippageBps = parseInt(options.slippage);
     const useEphemeral = options.privacy; // Privacy ON by default (disable with --no-privacy)
     const useZk = options.zk;
-    const useShadow = options.shadow;
     const isPrivate = options.private;
     const shouldScreen = options.screen; // Screening ON by default (disable with --no-screen)
     const customDestination = options.destination;
@@ -75,20 +72,11 @@ export const swapCommand = new Command('swap')
       }
     }
 
-    // ShadowWire supports 17 tokens
-    if (useShadow) {
-      if (!ShadowWireService.isTokenSupported(fromToken)) {
-        logger.error(`ShadowWire doesn't support ${fromToken}. Supported: ${ShadowWireService.getSupportedTokens().join(', ')}`);
-        return;
-      }
-    }
-
     logger.header('Private DCA Swap');
     logger.keyValue('From', `${amount} ${fromToken}`);
     logger.keyValue('To', toToken);
     logger.keyValue('Ephemeral', useEphemeral ? 'Yes (privacy mode)' : 'No');
     logger.keyValue('ZK Pool', useZk ? 'Yes (maximum privacy)' : 'No');
-    logger.keyValue('ShadowWire', useShadow ? 'Yes (encrypted amounts)' : 'No');
     logger.keyValue('Confidential', isPrivate ? logger.private() : logger.public());
     logger.keyValue('Screening', shouldScreen ? 'Enabled' : 'Disabled');
     if (customDestination) {
@@ -101,7 +89,7 @@ export const swapCommand = new Command('swap')
       const connection = getConnection(config.rpcUrl);
 
       // Step 0: Display privacy score
-      if (useEphemeral || shouldScreen || useZk || useShadow) {
+      if (useEphemeral || shouldScreen || useZk) {
         let score = 20; // Base non-custodial score
         const factors: string[] = ['Non-custodial: you control your keys'];
 
@@ -117,11 +105,6 @@ export const swapCommand = new Command('swap')
           score += 20;
           factors.push('Privacy Cash ZK pool provides anonymity set (hides WHO)');
         }
-        if (useShadow) {
-          score += 20;
-          factors.push('ShadowWire Bulletproofs encrypts amounts (hides HOW MUCH)');
-        }
-
         console.log('');
         logger.keyValue('Privacy Score', `${Math.min(score, 100)}/100`);
         factors.forEach((f) => console.log(`  - ${f}`));
@@ -153,7 +136,6 @@ export const swapCommand = new Command('swap')
           slippageBps,
           useEphemeral,
           useZk,
-          useShadow,
           isPrivate,
           shouldScreen,
           customDestination,
@@ -217,9 +199,6 @@ export const swapCommand = new Command('swap')
         logger.keyValue('ZK Privacy', 'Funds passed through Privacy Cash anonymity set (hides WHO)');
       }
 
-      if (useShadow) {
-        logger.keyValue('ShadowWire', 'Transaction amount encrypted with Bulletproofs (hides HOW MUCH)');
-      }
     } catch (error: any) {
       logger.error(`Swap failed: ${error.message}`);
     }

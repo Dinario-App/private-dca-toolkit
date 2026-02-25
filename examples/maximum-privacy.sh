@@ -4,12 +4,11 @@
 # Swaps SOL to USDC with every privacy feature enabled:
 # - Ephemeral wallet (on by default — DEX never sees your real wallet)
 # - Privacy Cash ZK pool (anonymity set — hides WHO you are)
-# - ShadowWire Bulletproofs (hides HOW MUCH)
 # - Arcium confidential transfer (encrypted amounts)
 #
 # Requirements:
 # - Node.js 24+ (for Privacy Cash ZK pool)
-# - npm install privacycash @radr/shadowwire @arcium-hq/client
+# - npm install privacycash @arcium-hq/client
 
 # Ensure you've configured the CLI first:
 # private-dca config set-wallet ~/.config/solana/id.json
@@ -20,6 +19,5 @@ private-dca swap \
   --to USDC \
   --amount 1 \
   --zk \
-  --shadow \
   --private \
   --slippage 100

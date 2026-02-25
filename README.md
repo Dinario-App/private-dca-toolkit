@@ -30,12 +30,11 @@ Private DCA stacks multiple privacy layers into one CLI:
 |-------|-----------|---------------|--------|
 | **Ephemeral Wallets** | Fresh keypair per trade | **WHO** -- DEX never sees your real wallet | Built-in (default) |
 | **Privacy Cash ZK** | Zero-knowledge pools (`privacycash`) | **WHO** -- funds mixed in anonymity set | Requires Node 24+ |
-| **ShadowWire** | Bulletproofs (`@radr/shadowwire`) | **HOW MUCH** -- amounts encrypted on-chain | Requires SDK install |
 | **Arcium** | Confidential transfers (`@arcium-hq/client`) | **HOW MUCH** -- encrypted amount display | SDK not yet available |
 | **Range** | Compliance screening | Sanctions check before trading | Built-in (default) |
 | **Helius** | Priority fee estimation | Optimal fees via `getPriorityFeeEstimate` | Auto-detected from RPC |
 
-Ephemeral wallets and Range screening are on by default. Privacy Cash, ShadowWire, and Arcium are opt-in flags -- each requires its respective SDK to be installed. When an SDK is unavailable, the CLI reports it honestly and continues with the remaining layers.
+Ephemeral wallets and Range screening are on by default. Privacy Cash and Arcium are opt-in flags -- each requires its respective SDK to be installed. When an SDK is unavailable, the CLI reports it honestly and continues with the remaining layers.
 
 ---
 
@@ -67,11 +66,8 @@ private-dca config show
 # Swap SOL -> USDC with ephemeral wallet (on by default)
 private-dca swap --from SOL --to USDC --amount 0.5
 
-# Add ShadowWire amount encryption
-private-dca swap --from SOL --to USDC --amount 0.5 --shadow
-
 # Stack multiple layers
-private-dca swap --from SOL --to USDC --amount 0.5 --zk --shadow
+private-dca swap --from SOL --to USDC --amount 0.5 --zk --private
 ```
 
 ### Schedule Recurring DCA
@@ -80,7 +76,7 @@ private-dca swap --from SOL --to USDC --amount 0.5 --zk --shadow
 # DCA $5 USDC -> SOL daily for 30 days
 private-dca dca schedule \
   --from USDC --to SOL --amount 5 \
-  --frequency daily --shadow \
+  --frequency daily \
   --executions 30
 ```
 
@@ -107,7 +103,6 @@ private-dca dca history
 |------|-------------|--------------|
 | `--no-privacy` | Disable ephemeral | Use your real wallet directly (less private) |
 | `--zk` | Privacy Cash | Deposit/withdraw through ZK anonymity pool |
-| `--shadow` | ShadowWire | Encrypt amounts with Bulletproofs |
 | `--private` | Arcium | Confidential transfer encryption |
 | `--no-screen` | Range | Disable address compliance screening |
 
@@ -151,10 +146,6 @@ User Wallet (hidden)
 |   Jupiter Swap          |  <- DEX sees ephemeral only
 +----------+--------------+
            v
-+-------------------------+
-|   ShadowWire            |  <- Optional: Bulletproofs (hides HOW MUCH)
-+----------+--------------+
-           v
      User Wallet (output)
 ```
 
@@ -176,7 +167,6 @@ src/
 |   |-- helius.service.ts          # Helius priority fee estimation
 |   |-- arcium.service.ts          # Arcium confidential transfers
 |   |-- privacy-cash.service.ts    # Privacy Cash ZK pools
-|   |-- shadowwire.service.ts      # ShadowWire Bulletproofs (Radr Labs)
 |   |-- range.service.ts           # Range compliance screening
 |   +-- scheduler.service.ts       # Cron-based DCA scheduling
 |-- sdk/
@@ -236,7 +226,6 @@ Built for the **Solana Privacy Hackathon 2026**:
 | Bounty | Integration | Details |
 |--------|------------|---------|
 | **Private Payments Track** | Ephemeral wallets | Fresh keypair per trade, auto rent recovery, account pooling for DCA |
-| **Radr Labs / ShadowWire** | `@radr/shadowwire` | Bulletproof-encrypted amounts, deposit/transfer/withdraw flow |
 | **Arcium** | `@arcium-hq/client` | RescueCipher encryption, graceful fallback when SDK unavailable |
 | **Privacy Cash** | `privacycash` | ZK pool deposit/withdraw, SOL + SPL token support |
 | **Helius** | Priority Fee API | `getPriorityFeeEstimate` for optimal fees, auto-detected from RPC URL |

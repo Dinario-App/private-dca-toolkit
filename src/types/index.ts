@@ -9,7 +9,7 @@ export interface DCASchedule {
   isPrivate: boolean;
   useEphemeral?: boolean;
   useZk?: boolean;
-  useShadow?: boolean; // ShadowWire encrypted amounts (Bulletproofs)
+  useShadow?: boolean;
   screenAddresses: boolean;
   slippageBps: number;
   totalExecutions?: number;

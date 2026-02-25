@@ -2,7 +2,6 @@ import { Command } from 'commander';
 import { loadConfig, loadKeypair, getConnection, WalletConfig } from '../utils/wallet';
 import { logger } from '../utils/logger';
 import { PrivacyCashService } from '../services/privacy-cash.service';
-import { ShadowWireService } from '../services/shadowwire.service';
 import { SchedulerService } from '../services/scheduler.service';
 import {
   SwapExecutorService,
@@ -27,7 +26,6 @@ dcaCommand
   .requiredOption('--frequency <freq>', 'Frequency: hourly, daily, weekly, monthly')
   .option('--no-privacy', 'Disable ephemeral wallet privacy', false)
   .option('--zk', 'Use Privacy Cash ZK pool for maximum anonymity (requires Node 24+)', false)
-  .option('--shadow', 'Use ShadowWire for encrypted amounts (Bulletproofs via Radr Labs)', false)
   .option('--private', 'Use Arcium confidential transfers for encrypted amounts', false)
   .option('--no-screen', 'Disable Range compliance screening', false)
   .option('--executions <number>', 'Total number of executions (optional)')
@@ -80,12 +78,6 @@ dcaCommand
       return;
     }
 
-    // ShadowWire supports 17 tokens
-    if (options.shadow && !ShadowWireService.isTokenSupported(fromToken)) {
-      logger.error(`ShadowWire doesn't support ${fromToken}. Supported: ${ShadowWireService.getSupportedTokens().join(', ')}`);
-      return;
-    }
-
     const schedule: DCASchedule = {
       id: randomUUID(),
       fromToken,
@@ -95,7 +87,7 @@ dcaCommand
       isPrivate: options.private,
       useEphemeral: options.privacy, // Privacy ON by default (disable with --no-privacy)
       useZk: options.zk,
-      useShadow: options.shadow,
+      useShadow: false,
       screenAddresses: options.screen, // Screening ON by default (disable with --no-screen)
       slippageBps,
       totalExecutions: options.executions ? parseInt(options.executions) : undefined,
@@ -114,7 +106,6 @@ dcaCommand
       { label: 'Frequency', value: frequency.toUpperCase() },
       { label: 'Ephemeral Wallet', value: options.privacy, badge: options.privacy ? 'PRIVATE' : 'PUBLIC' },
       { label: 'ZK Privacy', value: options.zk, badge: options.zk ? 'MAXIMUM' : undefined },
-      { label: 'ShadowWire', value: options.shadow, badge: options.shadow ? 'ENCRYPTED' : undefined },
       { label: 'Arcium Confidential', value: options.private, badge: options.private ? 'ENCRYPTED' : undefined },
       { label: 'Address Screening', value: options.screen },
       { label: 'Total Executions', value: schedule.totalExecutions?.toString() || 'Unlimited' },
@@ -146,11 +137,6 @@ dcaCommand
       logger.info('Note: Requires Node.js 24+ for full functionality.');
     }
 
-    if (options.shadow) {
-      console.log('');
-      logger.info('ShadowWire enabled: Transaction amounts will be encrypted with Bulletproofs.');
-      logger.info('Note: Requires @radr/shadowwire SDK.');
-    }
   });
 
 // List all DCA schedules
@@ -171,7 +157,7 @@ dcaCommand
     // Build table rows
     const rows = schedules.map((schedule) => {
       const status = schedule.active ? '\uD83D\uDFE2 Active' : '\uD83D\uDD34 Paused';
-      const privacyMode = schedule.useZk ? '\uD83D\uDEE1\uFE0F ZK' : (schedule.useShadow ? '\uD83D\uDD10 Shadow' : (schedule.useEphemeral ? '\uD83D\uDD12 Eph' : ''));
+      const privacyMode = schedule.useZk ? '\uD83D\uDEE1\uFE0F ZK' : (schedule.useEphemeral ? '\uD83D\uDD12 Eph' : '');
       const swap = `${schedule.amountPerExecution} ${schedule.fromToken}\u2192${schedule.toToken}`;
       const executions = schedulerService.getExecutions(schedule.id).length;
       const totalExec = schedule.totalExecutions ? `${executions}/${schedule.totalExecutions}` : `${executions}`;
@@ -369,7 +355,6 @@ async function executeDCA(schedule: DCASchedule, config: WalletConfig): Promise<
   const privacyFeatures: string[] = [];
   if (schedule.useZk) privacyFeatures.push('Privacy Cash ZK Pool');
   if (schedule.useEphemeral) privacyFeatures.push('Ephemeral Wallet');
-  if (schedule.useShadow) privacyFeatures.push('ShadowWire');
   if (schedule.isPrivate) privacyFeatures.push('Arcium Confidential');
   if (schedule.screenAddresses) privacyFeatures.push('Address Screening');
 
@@ -399,7 +384,6 @@ async function executeDCA(schedule: DCASchedule, config: WalletConfig): Promise<
         slippageBps: schedule.slippageBps,
         useEphemeral: schedule.useEphemeral ?? false,
         useZk: schedule.useZk ?? false,
-        useShadow: schedule.useShadow ?? false,
         isPrivate: schedule.isPrivate,
         shouldScreen: schedule.screenAddresses,
         rangeApiKey: config.rangeApiKey,
@@ -456,10 +440,6 @@ async function executeDCA(schedule: DCASchedule, config: WalletConfig): Promise<
     if (schedule.useEphemeral) {
       summaryItems.push({ label: 'Ephemeral', value: 'Main wallet hidden on-chain', color: 'green' as const });
     }
-    if (schedule.useShadow) {
-      summaryItems.push({ label: 'ShadowWire', value: 'Amount encrypted with Bulletproofs', color: 'green' as const });
-    }
-
     logger.summary('Execution Result', summaryItems);
   } catch (error: any) {
     // BUG FIX: Only log the error, do NOT re-throw.

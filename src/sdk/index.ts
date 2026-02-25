@@ -109,7 +109,7 @@ export class PrivateDCA extends EventEmitter {
       isPrivate: options.privacy?.arcium ?? false,
       useEphemeral: options.privacy?.ephemeral ?? false,
       useZk: options.privacy?.zk ?? false,
-      useShadow: options.privacy?.shadowwire ?? false,
+      useShadow: false,
       screenAddresses: options.privacy?.screenAddresses ?? false,
       slippageBps: options.slippageBps ?? 50,
       totalExecutions: options.executions,
@@ -326,7 +326,7 @@ export class PrivateDCA extends EventEmitter {
   /**
    * Internal: Execute a schedule using the shared SwapExecutorService.
    *
-   * Now includes all privacy features (ZK, ShadowWire, Arcium, screening)
+   * Now includes all privacy features (ZK, Arcium, screening)
    * that were previously missing from the SDK path.
    */
   private async executeSchedule(schedule: DCASchedule): Promise<ExecutionResult> {
@@ -344,7 +344,6 @@ export class PrivateDCA extends EventEmitter {
           slippageBps: schedule.slippageBps,
           useEphemeral: schedule.useEphemeral ?? false,
           useZk: schedule.useZk ?? false,
-          useShadow: schedule.useShadow ?? false,
           isPrivate: schedule.isPrivate,
           shouldScreen: schedule.screenAddresses,
           rangeApiKey: this.config.rangeApiKey,
@@ -375,7 +374,6 @@ export class PrivateDCA extends EventEmitter {
       frequency: schedule.frequency,
       useEphemeral: schedule.useEphemeral ?? false,
       useZk: schedule.useZk ?? false,
-      useShadow: schedule.useShadow ?? false,
       isPrivate: schedule.isPrivate ?? false,
       screenAddresses: schedule.screenAddresses ?? false,
       slippageBps: schedule.slippageBps,
